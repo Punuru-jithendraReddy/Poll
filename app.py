@@ -347,30 +347,20 @@ USER_SUGGESTIONS = {
     ]
 }
 
+
 # ==========================================
 # 3. PAGE SETUP
 # ==========================================
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# SESSION INIT
+# SESSION INIT (FIXED)
 # ==========================================
 if "team_select" not in st.session_state:
     st.session_state.team_select = []
 
-if "reset_form" not in st.session_state:
-    st.session_state.reset_form = False
-
 # ==========================================
-# HANDLE RESET BEFORE WIDGET LOADS
-# ==========================================
-if st.session_state.reset_form:
-    if "team_select" in st.session_state:
-        del st.session_state["team_select"]
-    st.session_state.reset_form = False
-
-# ==========================================
-# BULK IMPORT FUNCTION
+# BULK IMPORT FUNCTION (SAFE MERGE)
 # ==========================================
 def process_bulk_import(pasted_data, allowed_teams):
     clean_allowed = {t.strip().lower(): t for t in allowed_teams}
@@ -388,7 +378,7 @@ def process_bulk_import(pasted_data, allowed_teams):
     return len(matched_lines)
 
 # ==========================================
-# PRIMARY UI
+# 4. PRIMARY APPLICATION
 # ==========================================
 st.title("Identity Intel")
 st.caption("Secure Team Designation Portal")
@@ -396,30 +386,23 @@ st.caption("Secure Team Designation Portal")
 col_name, col_email = st.columns(2)
 
 with col_name:
-    user_name = st.selectbox(
-        "Operative Name",
-        options=["Select identity..."] + USER_NAMES
-    )
+    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
 
 with col_email:
-    user_email = st.text_input(
-        "Corporate Email",
-        placeholder="agent@intel.com"
-    )
+    user_email = st.text_input("Corporate Email", placeholder="agent@intel.com")
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
 
-# Remove invalid teams if name changes
+# Auto-remove forbidden teams if name changes
 st.session_state.team_select = [
     t for t in st.session_state.team_select if t in allowed_teams
 ]
 
 # ==========================================
-# BULK IMPORT
+# BULK DATA IMPORT
 # ==========================================
 st.markdown("### Bulk Data Import")
-
 pasted_data = st.text_area("Paste Data", height=100)
 
 if st.button("Process Excel Data"):
@@ -431,7 +414,7 @@ if st.button("Process Excel Data"):
         st.rerun()
 
 # ==========================================
-# TARGET SELECTION
+# TARGET SELECTION (FIXED - NO DEFAULT)
 # ==========================================
 st.markdown("### Target Selection")
 
@@ -444,55 +427,116 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMIT
+# SUBMISSION LOGIC
 # ==========================================
 if st.button("Submit Selections"):
-
     if user_name == "Select identity..." or not user_email:
         st.error("Please provide Name and Email.")
-
     elif not final_selections:
         st.error("Please select at least one target.")
-
     elif not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user_email):
         st.error("Invalid email format.")
-
     else:
-        target_email = user_email.strip().lower()
-
-        # Verify duplicate
         try:
-            df_verify = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+            df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+            df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
+            target_email = user_email.strip().lower()
 
-            if not df_verify.empty:
-                df_string = df_verify.astype(str).apply(
-                    lambda x: x.str.strip().str.lower()
-                )
-
-                if (df_string == target_email).any().any():
-                    st.error("This email has already submitted.")
-                    st.stop()
-
-        except Exception as e:
-            st.error(f"Verification failed: {e}")
-            st.stop()
-
-        # Submit form
-        try:
-            payload = {
-                ENTRY_EMAIL: user_email,
-                ENTRY_NAME: user_name,
-                ENTRY_MAGIC: final_selections
-            }
-
-            response = requests.post(GOOGLE_FORM_URL, data=payload)
-
-            if response.status_code == 200:
-                st.success("Submission successful.")
-                st.session_state.reset_form = True
-                st.rerun()
+            if (df_string == target_email).any().any():
+                st.error("This email has already submitted.")
             else:
-                st.error(f"Submission failed. Status Code: {response.status_code}")
+                payload = {
+                    ENTRY_EMAIL: user_email,
+                    ENTRY_NAME: user_name,
+                    ENTRY_MAGIC: final_selections
+                }
+                response = requests.post(GOOGLE_FORM_URL, data=payload)
 
-        except Exception as e:
-            st.error(f"Network error during submission: {e}")
+                if response.status_code == 200:
+                    st.success("Submission successful.")
+                    st.session_state.team_select = []
+                else:
+                    st.error("Submission failed.")
+        except:
+            st.error("Database connection failed.")
+
+st.divider()
+
+# ==========================================
+# 5. PREMIUM LIVE DASHBOARD
+# ==========================================
+st.markdown("### Live Leaderboard")
+
+try:
+    df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+
+    if not df.empty and len(df.columns) >= 4:
+        magic_column = df.columns[3]
+        all_votes = df[magic_column].dropna().astype(str)
+        split_votes = all_votes.str.split(',').explode().str.strip()
+
+        col_sort, col_slider = st.columns([1, 1])
+
+        with col_sort:
+            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+
+        with col_slider:
+            top_n = st.slider("Display Top:", 5, 100, 30, 5)
+
+        vote_counts = split_votes.value_counts().head(top_n)
+
+        if not vote_counts.empty:
+            df_plot = vote_counts.reset_index()
+            df_plot.columns = ['Designation', 'Votes']
+
+            if sort_order == "Most Votes":
+                df_plot = df_plot.sort_values(by='Votes', ascending=True)
+            else:
+                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+            fig = px.bar(
+                df_plot,
+                x="Votes",
+                y="Designation",
+                orientation="h",
+                text="Votes"
+            )
+
+            fig.update_traces(
+                marker=dict(
+                    color=df_plot["Votes"],
+                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                    line=dict(width=0)
+                ),
+                textposition="outside",
+                cliponaxis=False
+            )
+
+            bar_height = 32
+            dynamic_height = max(300, len(df_plot) * bar_height)
+
+            fig.update_layout(
+                height=dynamic_height,
+                bargap=0.35,
+                xaxis=dict(
+                    rangemode="tozero",
+                    showgrid=True,
+                    gridcolor="#E2E8F0",
+                    title="Total Votes",
+                    dtick=1
+                ),
+                yaxis=dict(title=""),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=20, b=0),
+                font=dict(color="#0F172A")
+            )
+
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No votes logged yet.")
+    else:
+        st.info("Database empty.")
+
+except:
+    st.warning("Dashboard offline.")
