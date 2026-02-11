@@ -478,7 +478,8 @@ if st.button("Submit Selections"):
 
             if response.status_code == 200:
                 st.success("Submission successful.")
-                st.session_state.team_select = []
+                if "team_select" in st.session_state:
+                    del st.session_state["team_select"]
                 st.rerun()
             else:
                 st.error(f"Submission failed. Status Code: {response.status_code}")
