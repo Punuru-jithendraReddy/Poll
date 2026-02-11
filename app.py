@@ -13,13 +13,11 @@ ENTRY_NAME = "entry.1398544706"
 ENTRY_MAGIC = "entry.921793836"   
 
 # Reading Data (Dashboard & Duplicate Verification)
-# CRITICAL: This MUST be your published CSV link, otherwise submissions will lock down.
-GOOGLE_SHEET_CSV_URL = "YOUR_PUBLISHED_CSV_LINK_HERE"
+GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
 
 # Admin Operations
-ADMIN_PASSWORD = "YOUR_SECRET_PASSWORD" 
-# The App Script URL you generated to erase the sheet
-GOOGLE_APPS_SCRIPT_WEBHOOK = "YOUR_APPS_SCRIPT_WEBHOOK_URL_HERE" 
+ADMIN_PASSWORD = "admin" # Change this to whatever you want
+GOOGLE_APPS_SCRIPT_WEBHOOK = "YOUR_APPS_SCRIPT_WEBHOOK_URL_HERE" # Optional: Add your webhook to enable remote erase
 
 # ==========================================
 # 2. MASTER DATA
@@ -71,12 +69,287 @@ TEAM_NAMES = [
     "H Y P E R _ S O L E.", "C Y P H E R _ S I N."
 ]
 
+# Keep adding your team's specific suggestions here from your Excel mapping!
 USER_SUGGESTIONS = {
-    "Saikiran Kandhi": ["Reactor Core", "Apex Sync", "Pixel Forge", "Zero Gravity", "Ignition Squad"],
-    "Shaik Afroz": ["FutureMakers", "IdeaCatalysts", "SparkLab", "InsightSphere"],
-    "Venkat": [], "Jithendra reddy": [], "Bhavana Lanka": [], "Sravanthi Chapram": [], 
-    "B. Shrineeth Reddy": [], "Shreya Singh": [], "Tharuni Vallepi": [], 
-    "Saumya Lailamony": [], "Monisha": [], "Vijay Sai": []
+    "Saikiran Kandhi": [
+        "Reactor Core",
+        "Apex Sync",
+        "Pixel Forge",
+        "Zero Gravity",
+        "Ignition Squad",
+        "Adrenaline Cartel",
+        "Logic Pulse",
+        "Node Builders",
+        "Venom Lab",
+        "Kinetic Forge",
+        "Quantum Delivery",
+        "Adrenaline Catalyst"
+    ],
+    "Shaik Afroz": [
+        "Innovators’ Guild",
+        "FutureMakers",
+        "IdeaCatalysts",
+        "SparkLab",
+        "InsightSphere",
+        "KnowledgeCrafters",
+        "DiscoveryHub",
+        "ResearchNest",
+        "ThinkTankers",
+        "FusionWorks",
+        "CollabInnovate",
+        "NextGen Minds",
+        "Catalyst Crew",
+        "Labyrinth of Ideas",
+        "Prototype Pioneers",
+        "The Experimenters’ Guild",
+        "IdeaStormers",
+        "Odyssey R&D",
+        "Aurora Minds."
+    ],
+    "Venkat": [
+        "InnoForge",
+        "ThinkLab",
+        "IdeaMint",
+        "BrainMatter",
+        "NextCore",
+        "CodePulse",
+        "SparkHub",
+        "LogicNest",
+        "ProtoPoint",
+        "FusionX",
+        "NexGen Lab",
+        "Innovex",
+        "R&D Squad",
+        "IdeaCell",
+        "CoreShift",
+        "PrimeMind",
+        "TechBloom",
+        "DeepThink",
+        "MindSprint",
+        "QuantumWorks",
+        "VisionCraft",
+        "NovaMinds",
+        "BlueLabs",
+        "AlphaThink",
+        "IdeaGrid."
+    ],
+    "Jithendra reddy": [
+        "TecNovid",
+        "Tadino",
+        "C-fit",
+        "Futi",
+        "SizFin",
+        "Noviq",
+        "Lumira",
+        "Sartiq",
+        "Ventari",
+        "Aethos",
+        "Xelera",
+        "Zenvia",
+        "Lussio",
+        "Omniq",
+        "Valoria",
+        "Kinetiq",
+        "Fiora",
+        "Syntheo",
+        "Aurore",
+        "Eleviq"
+    ],
+    "Bhavana Lanka": [
+        "InnoSprint",
+        "IdeaSprint",
+        "BuildStorm",
+        "ProtoMinds",
+        "SparkShift",
+        "FutureCraft",
+        "BrightEdge",
+        "MindForge",
+        "InnoWave",
+        "ThinkStack",
+        "The Idea Arch",
+        "LogicWorks",
+        "The Solutionists",
+        "ThinkCatalyst",
+        "FutureGrid",
+        "MoonShot Makers",
+        "MindSpark",
+        "EdgeWorks",
+        "Cognitive Sparks",
+        "The Foundry",
+        "Iterate & Elevate"
+    ],
+    "Sravanthi Chapram": [
+        "Pro Tech",
+        "Core Collective",
+        "Smart Works",
+        "Idea Foundry",
+        "Smart Squad",
+        "Innovation Circle",
+        "Impact Team",
+        "Team Rise",
+        "New Path",
+        "Vision Works",
+        "Innovators",
+        "Growth Hub",
+        "Progress Team",
+        "Creative Pulse",
+        "Change Makers",
+        "Innovation Unit",
+        "Smart Group",
+        "Tech Circle",
+        "Pro Thinkers",
+        "Team Forward"
+    ],
+    "B. Shrineeth Reddy": [
+        "Mindful Opus",
+        "Unified Ergon",
+        "A2Z_WEDO",
+        "1 4!ALL",
+        "Northfold",
+        "Nexus ops",
+        "Prime Synapse",
+        "In-various",
+        "Aegorin",
+        "Nexforge",
+        "Sfaira Infinite",
+        "No Finis",
+        "Corepath",
+        "Primevector",
+        "Axislimes",
+        "Clearframe",
+        "Varipoint",
+        "Infyline",
+        "181 Soros"
+    ],
+    "Shreya Singh": [
+        "NeuraX",
+        "AetherAI",
+        "QuantumEdge",
+        "NovaMind",
+        "CyberFlux",
+        "SparkMind AI",
+        "TechNova",
+        "Digital Nexus",
+        "Hyperion Labs",
+        "Future Systems Group",
+        "IntelliTech",
+        "InfiAI",
+        "MindMesh",
+        "Brainwave",
+        "DeepLogic",
+        "ThinkAI",
+        "IncuMind",
+        "Synapse Studio",
+        "CoreTech Innovation",
+        "TechOrbit"
+    ],
+    "Tharuni Vallepi": [
+        "PowerAI Nexus",
+        "Cognitive CloudWorks",
+        "FlowMind Innovators",
+        "PowerSynapse Squad",
+        "Fusion",
+        "Intelligence Team",
+        "AI-Driven Makers",
+        "CloudFlow Architects",
+        "NeuraPower Collective",
+        "IntelliPlatform Crew",
+        "AutoCloud Pioneers",
+        "Power AI Digital Team",
+        "Enterprise Intelligent Automation Council",
+        "Enterprise Power Automation and AI Office (EPAI)",
+        "Global Power Automation and AI Board (GPAI)",
+        "IntelliOps Crew",
+        "IntelliPlatform Guild",
+        "PowerSphere AI",
+        "AIFabricators",
+        "NeuroPower Makers",
+        "PowerBots Consortium",
+        "AppForge Intelligence",
+        "Digital Dynamos",
+        "Visioneers",
+        "The Byte Brigade",
+        "Power AI Pros",
+        "Core Connect",
+        "SyncUP Team"
+    ],
+    "Saumya Lailamony": [
+        "NextWave",
+        "InnovX",
+        "FutureForge",
+        "Technova",
+        "Dynamiq",
+        "Infinitum",
+        "Incubis",
+        "Ignitia",
+        "Pulseon",
+        "Techspire",
+        "PioneerX",
+        "Creatiq",
+        "Imaginex",
+        "Concepta",
+        "Datavex",
+        "Logicore",
+        "Infinitiq",
+        "Visionix",
+        "Coreon",
+        "Techvanta"
+    ],
+    "Monisha": [
+        "InnoVortex",
+        "NovaForge",
+        "Thinkubator",
+        "IgniteX",
+        "IdeaFoundry",
+        "VisionCraft",
+        "QuantumHive",
+        "NeoGenesis",
+        "InnoCore",
+        "MindForge",
+        "FutureNest",
+        "NovaThink",
+        "AetherWorks",
+        "Nexora",
+        "Evolvex",
+        "OriginPoint",
+        "Infinitum Forge",
+        "HelixWorks",
+        "FutureWeave",
+        "Cognitiva",
+        "Zentrix",
+        "Neovex",
+        "Quantro",
+        "Virex",
+        "Axion",
+        "Orbix",
+        "Fluxa",
+        "Kinetiq",
+        "Xelion",
+        "Ultrix"
+    ],
+    "Vijay Sai": [
+        "NULL_STATE",
+        "8HZ",
+        "D E A D _ B I T",
+        "ISO_CHROME",
+        "PRISM_RIOT",
+        "Ambiance 1.0",
+        "Object / 001",
+        "Protocol 28",
+        "Signal & Salt",
+        "Cold Start",
+        "NOISE FLOOR",
+        "RAW INPUT",
+        "OFF GRID",
+        "T-MINUS",
+        "PAPER THIN",
+        "28°_STUDIO.",
+        "Hello Team.",
+        "The Glitch.",
+        "ROOM_204.",
+        "H Y P E R _ S O L E.",
+        "C Y P H E R _ S I N."
+    ]
 }
 
 # ==========================================
@@ -162,21 +435,23 @@ if st.button("Submit Selections"):
                 # 1. Attempt to read the live database
                 df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
                 
-                # Check if the dataframe has data, and do a global search for the email
                 if not df.empty:
+                    # Convert to lowercase to catch "Email@gmail.com" vs "email@gmail.com"
                     df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-                    if (df_string == user_email.strip().lower()).any().any():
+                    target_email = user_email.strip().lower()
+                    
+                    if (df_string == target_email).any().any():
                         st.error(f"Access Denied: The identity '{user_email}' has already submitted a response.")
                     else:
-                        can_submit = True # Not a duplicate
+                        can_submit = True 
                 else:
-                    can_submit = True # Sheet is empty, safe to submit
+                    can_submit = True 
 
             except Exception as e:
-                # FAIL CLOSED: If we can't read the CSV, we DO NOT submit.
-                st.error(f"Critical Error: Cannot connect to verification database. Ensure your CSV link is correct. Data: {e}")
+                # Fail Closed Protocol
+                st.error(f"Critical Error: Cannot connect to verification database. Check your internet connection or CSV link. System locked.")
             
-            # 2. Only submit if verification passed
+            # 2. Transmit Data
             if can_submit:
                 payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
                 try:
@@ -200,9 +475,9 @@ st.caption("Top 30 designations based on live telemetry.")
 
 try:
     df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
-    if not df.empty and len(df.columns) >= 3:
-        # Assuming the 3rd column (index 2) contains the comma-separated team votes
-        magic_column = df.columns[2]
+    if not df.empty and len(df.columns) >= 4:
+        # Based on your image, the target selections are in Column 4 (Index 3)
+        magic_column = df.columns[3]
         all_votes = df[magic_column].dropna().astype(str)
         split_votes = all_votes.str.split(',').explode().str.strip()
         top_30 = split_votes.value_counts().head(30)
@@ -214,12 +489,12 @@ try:
     else:
         st.info("Database is currently empty.")
 except Exception as e:
-    st.warning("Dashboard offline. Ensure your Google Sheet CSV link is correct.")
+    st.warning("Dashboard offline. Waiting for initial data synchronization.")
 
 # ==========================================
 # 6. HIDDEN ADMIN OPERATIONS
 # ==========================================
-st.markdown("<br><br>", unsafe_allow_html=True) # Adds space at the bottom
+st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("System Diagnostics & Operations", expanded=False):
     st.caption("Warning: Authorized personnel only. These actions are irreversible.")
     admin_pwd_input = st.text_input("Enter Admin Key", type="password")
@@ -229,11 +504,10 @@ with st.expander("System Diagnostics & Operations", expanded=False):
         if st.button("ERASE ALL DATABASE RESPONSES"):
             with st.spinner("Purging database..."):
                 try:
-                    # Send signal to your Apps Script Webhook
                     res = requests.post(GOOGLE_APPS_SCRIPT_WEBHOOK, data={"action": "reset"})
                     if res.status_code == 200:
-                        st.success("Database purged successfully. Please clear your Google Form responses manually as well.")
+                        st.success("Database purged. Note: You must also clear your Google Form responses manually.")
                     else:
-                        st.error("Failed to reach Webhook.")
+                        st.error("Failed to reach Webhook. Did you create the Apps Script?")
                 except Exception as e:
                     st.error(f"Error: {e}")
