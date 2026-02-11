@@ -24,15 +24,19 @@ USER_NAMES = [
     "Monisha", "Vijay Sai"
 ]
 
-TEAM_NAMES = TEAM_NAMES = [
-    # (your full TEAM_NAMES list remains unchanged)
+TEAM_NAMES = [
+    "Reactor Core", "Apex Sync", "Pixel Forge", "Zero Gravity", "Ignition Squad",
+    "FutureMakers", "IdeaCatalysts", "SparkLab", "InsightSphere",
+    "QuantumWorks", "NovaMind", "MindForge", "Innovation Circle",
+    "VisionCraft", "NextWave", "FusionX", "Core Collective"
 ]
 
 USER_SUGGESTIONS = {
     "Saikiran Kandhi": ["Reactor Core", "Apex Sync", "Pixel Forge", "Zero Gravity", "Ignition Squad"],
     "Shaik Afroz": ["FutureMakers", "IdeaCatalysts", "SparkLab", "InsightSphere"],
-    "Venkat": [], "Jithendra reddy": [], "Bhavana Lanka": [], "Sravanthi Chapram": [],
-    "B. Shrineeth Reddy": [], "Shreya Singh": [], "Tharuni Vallepi": [],
+    "Venkat": [], "Jithendra reddy": [], "Bhavana Lanka": [],
+    "Sravanthi Chapram": [], "B. Shrineeth Reddy": [],
+    "Shreya Singh": [], "Tharuni Vallepi": [],
     "Saumya Lailamony": [], "Monisha": [], "Vijay Sai": []
 }
 
@@ -48,7 +52,7 @@ if "team_select" not in st.session_state:
     st.session_state.team_select = []
 
 # ==========================================
-# BULK IMPORT FUNCTION (FIXED BUG)
+# BULK IMPORT FUNCTION (SAFE MERGE)
 # ==========================================
 def process_bulk_import(pasted_data, allowed_teams):
     clean_allowed = {t.strip().lower(): t for t in allowed_teams}
@@ -82,6 +86,14 @@ with col_email:
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
 
+# Auto-remove forbidden teams if name changes
+st.session_state.team_select = [
+    t for t in st.session_state.team_select if t in allowed_teams
+]
+
+# ==========================================
+# BULK DATA IMPORT
+# ==========================================
 st.markdown("### Bulk Data Import")
 pasted_data = st.text_area("Paste Data", height=100)
 
@@ -94,14 +106,13 @@ if st.button("Process Excel Data"):
         st.rerun()
 
 # ==========================================
-# TARGET SELECTION (FIXED)
+# TARGET SELECTION (FIXED - NO DEFAULT)
 # ==========================================
 st.markdown("### Target Selection")
 
 final_selections = st.multiselect(
     "Combobox Search",
     options=allowed_teams,
-    default=st.session_state.get("team_select", []),
     key="team_select",
     label_visibility="collapsed",
     placeholder="Search manually or review imported targets..."
