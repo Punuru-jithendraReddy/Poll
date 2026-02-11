@@ -2,20 +2,24 @@ import streamlit as st
 import requests
 import re
 import pandas as pd
-from urllib.error import URLError
 
 # ==========================================
-# 1. GOOGLE CONFIGURATION
+# 1. SYSTEM CONFIGURATION & CREDENTIALS
 # ==========================================
-# Form Writing (Write votes here)
+# Writing Data (Forms)
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 ENTRY_EMAIL = "emailAddress"      
 ENTRY_NAME = "entry.1398544706"   
 ENTRY_MAGIC = "entry.921793836"   
 
-# Form Reading (Read votes to check for duplicates)
-# REPLACE THIS with your Google Sheet published CSV link!
-GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID_HERE/pub?output=csv"
+# Reading Data (Dashboard & Duplicate Verification)
+# CRITICAL: This MUST be your published CSV link, otherwise submissions will lock down.
+GOOGLE_SHEET_CSV_URL = "YOUR_PUBLISHED_CSV_LINK_HERE"
+
+# Admin Operations
+ADMIN_PASSWORD = "YOUR_SECRET_PASSWORD" 
+# The App Script URL you generated to erase the sheet
+GOOGLE_APPS_SCRIPT_WEBHOOK = "YOUR_APPS_SCRIPT_WEBHOOK_URL_HERE" 
 
 # ==========================================
 # 2. MASTER DATA
@@ -76,57 +80,37 @@ USER_SUGGESTIONS = {
 }
 
 # ==========================================
-# 3. PAGE SETUP & ENTERPRISE UI
+# 3. PAGE SETUP & UI
 # ==========================================
 st.set_page_config(page_title="Identity Intel", page_icon="🌐", layout="centered")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
     .stApp { background-color: #f0f4f8; font-family: 'Inter', sans-serif; }
-    
     .block-container {
-        background-color: #ffffff; padding: 3rem 3rem 4rem 3rem !important;
-        border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-top: 3rem; margin-bottom: 3rem; border: 1px solid #e2e8f0;
+        background-color: #ffffff; padding: 3rem; border-radius: 12px; 
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-top: 3rem; margin-bottom: 3rem; border: 1px solid #e2e8f0;
     }
-
     header { visibility: hidden; }
-    
     .app-title { color: #1e3a8a; font-size: 2.2rem; font-weight: 700; text-align: center; margin-bottom: 0.2rem; }
     .app-subtitle { color: #64748b; text-align: center; font-size: 1rem; margin-bottom: 2.5rem; }
-    .section-header {
-        color: #1e3a8a; font-weight: 600; font-size: 1.1rem; margin-top: 2rem; 
-        margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;
-    }
-
-    .stTextInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
-        background-color: #ffffff !important; color: #0f172a !important;
-        border: 1px solid #cbd5e1 !important; border-radius: 6px !important;
-    }
-    .stTextInput input:focus, .stSelectbox div[data-baseweb="select"]:focus-within, .stTextArea textarea:focus {
-        border-color: #2563eb !important; box-shadow: 0 0 0 1px #2563eb !important;
-    }
-    
+    .section-header { color: #1e3a8a; font-weight: 600; font-size: 1.1rem; margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
+    .stTextInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea { background-color: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; border-radius: 6px !important; }
+    .stTextInput input:focus, .stSelectbox div[data-baseweb="select"]:focus-within, .stTextArea textarea:focus { border-color: #2563eb !important; box-shadow: 0 0 0 1px #2563eb !important; }
     .stMultiSelect [data-baseweb="tag"] { background-color: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
     .stMultiSelect [data-baseweb="tag"] span { color: #1e40af; }
-
-    div.stButton > button {
-        background-color: #2563eb; color: #ffffff !important; border-radius: 6px;
-        padding: 0.6rem 1.5rem; font-weight: 600; width: 100%; border: none;
-        transition: all 0.2s ease; margin-top: 1.5rem;
-    }
-    div.stButton > button:hover { background-color: #1d4ed8; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2); }
+    div.stButton > button { background-color: #2563eb; color: #ffffff !important; border-radius: 6px; padding: 0.6rem 1.5rem; font-weight: 600; width: 100%; border: none; transition: all 0.2s ease; margin-top: 1.5rem; }
+    div.stButton > button:hover { background-color: #1d4ed8; box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 4. APP LOGIC & LAYOUT
-# ==========================================
 if 'selections' not in st.session_state:
     st.session_state.selections = []
 
+# ==========================================
+# 4. PRIMARY APPLICATION
+# ==========================================
 st.markdown("<div class='app-title'>Identity Intel</div>", unsafe_allow_html=True)
 st.markdown("<div class='app-subtitle'>Secure Team Designation Portal</div>", unsafe_allow_html=True)
 
@@ -150,77 +134,106 @@ if st.button("Process Excel Data"):
         clean_allowed = {t.strip().lower(): t for t in allowed_teams}
         matched_lines = []
         raw_lines = pasted_data.replace('\r', '\n').split('\n')
-        
         for line in raw_lines:
             clean_line = line.strip().lower()
             if clean_line and clean_line in clean_allowed:
                 matched_lines.append(clean_allowed[clean_line])
-        
         st.session_state.selections = list(set(st.session_state.selections + matched_lines))
-        st.success(f"Successfully matched and authenticated {len(matched_lines)} targets.")
+        st.success(f"Matched {len(matched_lines)} targets.")
         st.rerun()
 
 st.markdown("<div class='section-header'>Target Selection</div>", unsafe_allow_html=True)
-final_selections = st.multiselect(
-    "Combobox Search",
-    options=allowed_teams,
-    default=st.session_state.selections,
-    label_visibility="collapsed",
-    placeholder="Search manually or review your imported targets..."
-)
+final_selections = st.multiselect("Combobox Search", options=allowed_teams, default=st.session_state.selections, label_visibility="collapsed", placeholder="Search manually or review your imported targets...")
 st.session_state.selections = final_selections
 
-# ==========================================
-# 5. VERIFICATION & SUBMISSION
-# ==========================================
+# --- FAIL-SECURE SUBMISSION LOGIC ---
 if st.button("Submit Selections"):
-    # 1. Basic empty checks
     if user_name == "Select identity..." or not user_email:
         st.error("Authentication Error: Please provide both Name and Email.")
     elif not final_selections:
         st.error("Requirement Error: Please select at least one target.")
+    elif not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user_email):
+        st.error("Validation Error: Please enter a valid corporate email address.")
     else:
-        # 2. Format Verification (Regex)
-        email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-        if not re.match(email_pattern, user_email):
-            st.error("Validation Error: Please enter a valid corporate email address.")
-        else:
-            with st.spinner("Verifying credentials and checking for duplicate logs..."):
-                email_exists = False
+        with st.spinner("Verifying credentials and checking database..."):
+            can_submit = False
+            
+            try:
+                # 1. Attempt to read the live database
+                df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
                 
-                # 3. Duplicate Verification (Read Google Sheets CSV)
-                try:
-                    df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
-                    # Convert the entire dataframe to lowercase text to do a master sweep for the email
+                # Check if the dataframe has data, and do a global search for the email
+                if not df.empty:
                     df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-                    target_email = user_email.strip().lower()
-                    
-                    # Check if the email exists anywhere in the sheet
-                    if (df_string == target_email).any().any():
-                        email_exists = True
-                except pd.errors.EmptyDataError:
-                    # If the sheet is completely empty, there are obviously no duplicates
-                    pass
-                except Exception as e:
-                    # If there is a network error fetching the CSV, we warn them but don't crash
-                    st.warning("Verification server unreachable. Proceeding with caution.")
-
-                if email_exists:
-                    st.error(f"Access Denied: The identity '{user_email}' has already submitted a response.")
+                    if (df_string == user_email.strip().lower()).any().any():
+                        st.error(f"Access Denied: The identity '{user_email}' has already submitted a response.")
+                    else:
+                        can_submit = True # Not a duplicate
                 else:
-                    # 4. Final Submission
-                    payload = {
-                        ENTRY_EMAIL: user_email,
-                        ENTRY_NAME: user_name,
-                        ENTRY_MAGIC: final_selections 
-                    }
-                    try:
-                        response = requests.post(GOOGLE_FORM_URL, data=payload)
-                        if response.status_code == 200:
-                            st.success("Log confirmed. Targets secured successfully.")
-                            st.balloons()
-                            st.session_state.selections = [] 
-                        else:
-                            st.error(f"Uplink failed. Status Code: {response.status_code}.")
-                    except Exception as e:
-                        st.error(f"Network termination: {e}")
+                    can_submit = True # Sheet is empty, safe to submit
+
+            except Exception as e:
+                # FAIL CLOSED: If we can't read the CSV, we DO NOT submit.
+                st.error(f"Critical Error: Cannot connect to verification database. Ensure your CSV link is correct. Data: {e}")
+            
+            # 2. Only submit if verification passed
+            if can_submit:
+                payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
+                try:
+                    response = requests.post(GOOGLE_FORM_URL, data=payload)
+                    if response.status_code == 200:
+                        st.success("Log confirmed. Targets secured successfully.")
+                        st.balloons()
+                        st.session_state.selections = [] 
+                    else:
+                        st.error("Uplink failed. Check Form URL.")
+                except Exception as e:
+                    st.error(f"Network termination: {e}")
+
+st.divider()
+
+# ==========================================
+# 5. LIVE DASHBOARD (TOP 30)
+# ==========================================
+st.markdown("### Live Leaderboard")
+st.caption("Top 30 designations based on live telemetry.")
+
+try:
+    df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+    if not df.empty and len(df.columns) >= 3:
+        # Assuming the 3rd column (index 2) contains the comma-separated team votes
+        magic_column = df.columns[2]
+        all_votes = df[magic_column].dropna().astype(str)
+        split_votes = all_votes.str.split(',').explode().str.strip()
+        top_30 = split_votes.value_counts().head(30)
+        
+        if not top_30.empty:
+            st.bar_chart(top_30, color="#2563eb")
+        else:
+            st.info("Awaiting initial telemetry. No votes logged yet.")
+    else:
+        st.info("Database is currently empty.")
+except Exception as e:
+    st.warning("Dashboard offline. Ensure your Google Sheet CSV link is correct.")
+
+# ==========================================
+# 6. HIDDEN ADMIN OPERATIONS
+# ==========================================
+st.markdown("<br><br>", unsafe_allow_html=True) # Adds space at the bottom
+with st.expander("System Diagnostics & Operations", expanded=False):
+    st.caption("Warning: Authorized personnel only. These actions are irreversible.")
+    admin_pwd_input = st.text_input("Enter Admin Key", type="password")
+    
+    if admin_pwd_input == ADMIN_PASSWORD:
+        st.warning("Admin Access Granted.")
+        if st.button("ERASE ALL DATABASE RESPONSES"):
+            with st.spinner("Purging database..."):
+                try:
+                    # Send signal to your Apps Script Webhook
+                    res = requests.post(GOOGLE_APPS_SCRIPT_WEBHOOK, data={"action": "reset"})
+                    if res.status_code == 200:
+                        st.success("Database purged successfully. Please clear your Google Form responses manually as well.")
+                    else:
+                        st.error("Failed to reach Webhook.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
