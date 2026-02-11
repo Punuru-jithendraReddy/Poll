@@ -4,13 +4,13 @@ import requests
 # ==========================================
 # 1. GOOGLE FORM CONFIGURATION
 # ==========================================
-# Replace YOUR_FORM_ID_HERE with your actual form ID
-GOOGLE_FORM_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?output=csv"
+# Your exact Form ID, ending in /formResponse
+GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 
 # The exact hooks for your specific form
-ENTRY_EMAIL = "emailAddress"   # Google's default keyword for the built-in email field
-ENTRY_NAME = "entry.1398544706"    # REPLACE THIS with your 1st unique number (Name dropdown)
-ENTRY_MAGIC = "entry.921793836"   # REPLACE THIS with your 2nd unique number (Target selection)
+ENTRY_EMAIL = "emailAddress"      # Leave exactly as-is for Google's email collector
+ENTRY_NAME = "entry.1398544706"   # Your "Operative Name" dropdown
+ENTRY_MAGIC = "entry.921793836"   # Your "Target Selection" combobox
 
 # ==========================================
 # 2. MASTER DATA
