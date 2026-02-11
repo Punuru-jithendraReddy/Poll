@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import re
 import pandas as pd
+import plotly.express as px
 
 # ==========================================
 # 1. SYSTEM CONFIGURATION & CREDENTIALS
@@ -14,10 +15,6 @@ ENTRY_MAGIC = "entry.921793836"
 
 # Reading Data (Dashboard & Duplicate Verification)
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
-
-# Admin Operations
-ADMIN_PASSWORD = "admin" # Change this to whatever you want
-GOOGLE_APPS_SCRIPT_WEBHOOK = "YOUR_APPS_SCRIPT_WEBHOOK_URL_HERE" # Optional: Add your webhook to enable remote erase
 
 # ==========================================
 # 2. MASTER DATA
@@ -449,7 +446,7 @@ if st.button("Submit Selections"):
 
             except Exception as e:
                 # Fail Closed Protocol
-                st.error(f"Critical Error: Cannot connect to verification database. Check your internet connection or CSV link. System locked.")
+                st.error("Critical Error: Cannot connect to verification database. Check your internet connection or CSV link. System locked.")
             
             # 2. Transmit Data
             if can_submit:
@@ -480,34 +477,56 @@ try:
         magic_column = df.columns[3]
         all_votes = df[magic_column].dropna().astype(str)
         split_votes = all_votes.str.split(',').explode().str.strip()
-        top_30 = split_votes.value_counts().head(30)
         
-        if not top_30.empty:
-            st.bar_chart(top_30, color="#2563eb")
+        # Calculate the top 30
+        vote_counts = split_votes.value_counts().head(30)
+        
+        if not vote_counts.empty:
+            # Prepare data for the advanced chart
+            df_plot = vote_counts.reset_index()
+            df_plot.columns = ['Designation', 'Votes']
+            
+            # Add UI Sorting Controls
+            sort_col, empty_col = st.columns([1, 2])
+            with sort_col:
+                sort_order = st.selectbox("Sort Leaderboard By:", ["Most Votes", "Alphabetical"])
+            
+            if sort_order == "Most Votes":
+                df_plot = df_plot.sort_values(by='Votes', ascending=True)
+            else:
+                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+            
+            # Build the Transposed (Horizontal) Plotly Chart
+            fig = px.bar(
+                df_plot, 
+                x='Votes', 
+                y='Designation', 
+                orientation='h',       
+                text='Votes',          
+                color_discrete_sequence=["#2563eb"]
+            )
+            
+            # Enforce strict visual rules (No negatives, clean layout)
+            fig.update_layout(
+                xaxis=dict(
+                    rangemode='tozero',        
+                    showgrid=True, 
+                    title="Total Votes",
+                    dtick=1                    
+                ), 
+                yaxis=dict(title="", tickmode='linear'), 
+                plot_bgcolor='rgba(0,0,0,0)',  
+                paper_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=30, b=0),
+                height=max(400, len(df_plot) * 40) 
+            )
+            
+            fig.update_traces(textposition='outside', cliponaxis=False)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            
         else:
             st.info("Awaiting initial telemetry. No votes logged yet.")
     else:
         st.info("Database is currently empty.")
 except Exception as e:
     st.warning("Dashboard offline. Waiting for initial data synchronization.")
-
-# ==========================================
-# 6. HIDDEN ADMIN OPERATIONS
-# ==========================================
-st.markdown("<br><br>", unsafe_allow_html=True)
-with st.expander("System Diagnostics & Operations", expanded=False):
-    st.caption("Warning: Authorized personnel only. These actions are irreversible.")
-    admin_pwd_input = st.text_input("Enter Admin Key", type="password")
-    
-    if admin_pwd_input == ADMIN_PASSWORD:
-        st.warning("Admin Access Granted.")
-        if st.button("ERASE ALL DATABASE RESPONSES"):
-            with st.spinner("Purging database..."):
-                try:
-                    res = requests.post(GOOGLE_APPS_SCRIPT_WEBHOOK, data={"action": "reset"})
-                    if res.status_code == 200:
-                        st.success("Database purged. Note: You must also clear your Google Form responses manually.")
-                    else:
-                        st.error("Failed to reach Webhook. Did you create the Apps Script?")
-                except Exception as e:
-                    st.error(f"Error: {e}")
