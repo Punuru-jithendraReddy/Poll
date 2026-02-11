@@ -358,8 +358,15 @@ st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centere
 if "team_select" not in st.session_state:
     st.session_state.team_select = []
 
-# Flag to control reset after submission
 if "reset_form" not in st.session_state:
+    st.session_state.reset_form = False
+
+# ==========================================
+# HANDLE RESET BEFORE WIDGET LOADS
+# ==========================================
+if st.session_state.reset_form:
+    if "team_select" in st.session_state:
+        del st.session_state["team_select"]
     st.session_state.reset_form = False
 
 # ==========================================
@@ -437,7 +444,7 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMISSION LOGIC (FULLY FIXED)
+# SUBMIT
 # ==========================================
 if st.button("Submit Selections"):
 
@@ -453,7 +460,7 @@ if st.button("Submit Selections"):
     else:
         target_email = user_email.strip().lower()
 
-        # ---- VERIFY DUPLICATE EMAIL ----
+        # Verify duplicate
         try:
             df_verify = pd.read_csv(GOOGLE_SHEET_CSV_URL)
 
@@ -470,7 +477,7 @@ if st.button("Submit Selections"):
             st.error(f"Verification failed: {e}")
             st.stop()
 
-        # ---- SUBMIT FORM ----
+        # Submit form
         try:
             payload = {
                 ENTRY_EMAIL: user_email,
@@ -482,116 +489,10 @@ if st.button("Submit Selections"):
 
             if response.status_code == 200:
                 st.success("Submission successful.")
-
-                # Set reset flag
                 st.session_state.reset_form = True
                 st.rerun()
-
             else:
                 st.error(f"Submission failed. Status Code: {response.status_code}")
 
         except Exception as e:
             st.error(f"Network error during submission: {e}")
-
-# ==========================================
-# RESET FORM AFTER RERUN (SAFE METHOD)
-# ==========================================
-if st.session_state.reset_form:
-    st.session_state.team_select = []
-    st.session_state.reset_form = False
-
-# ==========================================
-# LIVE DASHBOARD (GRAPH WILL ALWAYS UPDATE)
-# ==========================================
-st.divider()
-st.markdown("### Live Leaderboard")
-
-try:
-    # Always fetch fresh data
-    df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
-
-    if not df.empty and len(df.columns) >= 4:
-        magic_column = df.columns[3]
-
-        all_votes = df[magic_column].dropna().astype(str)
-        split_votes = all_votes.str.split(',').explode().str.strip()
-
-        col_sort, col_slider = st.columns([1, 1])
-
-        with col_sort:
-            sort_order = st.selectbox(
-                "Sort By:",
-                ["Most Votes", "Alphabetical"]
-            )
-
-        with col_slider:
-            top_n = st.slider("Display Top:", 5, 100, 30, 5)
-
-        vote_counts = split_votes.value_counts().head(top_n)
-
-        if not vote_counts.empty:
-            df_plot = vote_counts.reset_index()
-            df_plot.columns = ['Designation', 'Votes']
-
-            if sort_order == "Most Votes":
-                df_plot = df_plot.sort_values(
-                    by='Votes', ascending=True
-                )
-            else:
-                df_plot = df_plot.sort_values(
-                    by='Designation', ascending=False
-                )
-
-            fig = px.bar(
-                df_plot,
-                x="Votes",
-                y="Designation",
-                orientation="h",
-                text="Votes"
-            )
-
-            fig.update_traces(
-                marker=dict(
-                    color=df_plot["Votes"],
-                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                    line=dict(width=0)
-                ),
-                textposition="outside",
-                cliponaxis=False
-            )
-
-            bar_height = 32
-            dynamic_height = max(300, len(df_plot) * bar_height)
-
-            fig.update_layout(
-                height=dynamic_height,
-                bargap=0.35,
-                xaxis=dict(
-                    rangemode="tozero",
-                    showgrid=True,
-                    gridcolor="#E2E8F0",
-                    title="Total Votes",
-                    dtick=1
-                ),
-                yaxis=dict(title=""),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=20, b=0),
-                font=dict(color="#0F172A")
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True,
-                config={"displayModeBar": False}
-            )
-
-        else:
-            st.info("No votes logged yet.")
-
-    else:
-        st.info("Database empty.")
-
-except Exception as e:
-    st.warning(f"Dashboard fetch error: {e}")
-
