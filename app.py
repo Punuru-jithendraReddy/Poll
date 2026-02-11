@@ -353,13 +353,13 @@ USER_SUGGESTIONS = {
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# SESSION INIT (FIXED)
+# SESSION INIT
 # ==========================================
 if "team_select" not in st.session_state:
     st.session_state.team_select = []
 
 # ==========================================
-# BULK IMPORT FUNCTION (SAFE MERGE)
+# BULK IMPORT FUNCTION
 # ==========================================
 def process_bulk_import(pasted_data, allowed_teams):
     clean_allowed = {t.strip().lower(): t for t in allowed_teams}
@@ -385,15 +385,21 @@ st.caption("Secure Team Designation Portal")
 col_name, col_email = st.columns(2)
 
 with col_name:
-    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
+    user_name = st.selectbox(
+        "Operative Name",
+        options=["Select identity..."] + USER_NAMES
+    )
 
 with col_email:
-    user_email = st.text_input("Corporate Email", placeholder="agent@intel.com")
+    user_email = st.text_input(
+        "Corporate Email",
+        placeholder="agent@intel.com"
+    )
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
 
-# Auto-remove forbidden teams if name changes
+# Auto-clean forbidden teams if name changes
 st.session_state.team_select = [
     t for t in st.session_state.team_select if t in allowed_teams
 ]
@@ -402,6 +408,7 @@ st.session_state.team_select = [
 # BULK DATA IMPORT
 # ==========================================
 st.markdown("### Bulk Data Import")
+
 pasted_data = st.text_area("Paste Data", height=100)
 
 if st.button("Process Excel Data"):
@@ -413,7 +420,7 @@ if st.button("Process Excel Data"):
         st.rerun()
 
 # ==========================================
-# TARGET SELECTION (FIXED - NO DEFAULT)
+# TARGET SELECTION
 # ==========================================
 st.markdown("### Target Selection")
 
@@ -426,38 +433,58 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMISSION LOGIC
+# SUBMISSION LOGIC (FULLY FIXED)
 # ==========================================
 if st.button("Submit Selections"):
+
     if user_name == "Select identity..." or not user_email:
         st.error("Please provide Name and Email.")
+
     elif not final_selections:
         st.error("Please select at least one target.")
+
     elif not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user_email):
         st.error("Invalid email format.")
+
     else:
+        target_email = user_email.strip().lower()
+
+        # ---- STEP 1: VERIFY EMAIL NOT ALREADY SUBMITTED ----
         try:
             df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
-            df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-            target_email = user_email.strip().lower()
 
-            if (df_string == target_email).any().any():
-                st.error("This email has already submitted.")
+            if not df.empty:
+                df_string = df.astype(str).apply(
+                    lambda x: x.str.strip().str.lower()
+                )
+
+                if (df_string == target_email).any().any():
+                    st.error("This email has already submitted.")
+                    st.stop()
+
+        except Exception as e:
+            st.error(f"Verification failed: {e}")
+            st.stop()
+
+        # ---- STEP 2: SUBMIT TO GOOGLE FORM ----
+        try:
+            payload = {
+                ENTRY_EMAIL: user_email,
+                ENTRY_NAME: user_name,
+                ENTRY_MAGIC: final_selections
+            }
+
+            response = requests.post(GOOGLE_FORM_URL, data=payload)
+
+            if response.status_code == 200:
+                st.success("Submission successful.")
+                st.session_state.team_select = []
+                st.rerun()
             else:
-                payload = {
-                    ENTRY_EMAIL: user_email,
-                    ENTRY_NAME: user_name,
-                    ENTRY_MAGIC: final_selections
-                }
-                response = requests.post(GOOGLE_FORM_URL, data=payload)
+                st.error(f"Submission failed. Status Code: {response.status_code}")
 
-                if response.status_code == 200:
-                    st.success("Submission successful.")
-                    st.session_state.team_select = []
-                else:
-                    st.error("Submission failed.")
-        except:
-            st.error("Database connection failed.")
+        except Exception as e:
+            st.error(f"Network error during submission: {e}")
 
 st.divider()
 
@@ -531,11 +558,16 @@ try:
                 font=dict(color="#0F172A")
             )
 
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+                config={"displayModeBar": False}
+            )
         else:
             st.info("No votes logged yet.")
+
     else:
         st.info("Database empty.")
 
-except:
-    st.warning("Dashboard offline.")
+except Exception as e:
+    st.warning(f"Dashboard offline: {e}")
