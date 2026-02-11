@@ -358,6 +358,10 @@ st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centere
 if "team_select" not in st.session_state:
     st.session_state.team_select = []
 
+# Flag to control reset after submission
+if "reset_form" not in st.session_state:
+    st.session_state.reset_form = False
+
 # ==========================================
 # BULK IMPORT FUNCTION
 # ==========================================
@@ -377,7 +381,7 @@ def process_bulk_import(pasted_data, allowed_teams):
     return len(matched_lines)
 
 # ==========================================
-# 4. PRIMARY APPLICATION
+# PRIMARY UI
 # ==========================================
 st.title("Identity Intel")
 st.caption("Secure Team Designation Portal")
@@ -399,13 +403,13 @@ with col_email:
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
 
-# Auto-clean forbidden teams if name changes
+# Remove invalid teams if name changes
 st.session_state.team_select = [
     t for t in st.session_state.team_select if t in allowed_teams
 ]
 
 # ==========================================
-# BULK DATA IMPORT
+# BULK IMPORT
 # ==========================================
 st.markdown("### Bulk Data Import")
 
@@ -449,12 +453,12 @@ if st.button("Submit Selections"):
     else:
         target_email = user_email.strip().lower()
 
-        # ---- STEP 1: VERIFY EMAIL NOT ALREADY SUBMITTED ----
+        # ---- VERIFY DUPLICATE EMAIL ----
         try:
-            df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+            df_verify = pd.read_csv(GOOGLE_SHEET_CSV_URL)
 
-            if not df.empty:
-                df_string = df.astype(str).apply(
+            if not df_verify.empty:
+                df_string = df_verify.astype(str).apply(
                     lambda x: x.str.strip().str.lower()
                 )
 
@@ -466,7 +470,7 @@ if st.button("Submit Selections"):
             st.error(f"Verification failed: {e}")
             st.stop()
 
-        # ---- STEP 2: SUBMIT TO GOOGLE FORM ----
+        # ---- SUBMIT FORM ----
         try:
             payload = {
                 ENTRY_EMAIL: user_email,
@@ -478,34 +482,47 @@ if st.button("Submit Selections"):
 
             if response.status_code == 200:
                 st.success("Submission successful.")
-                if "team_select" in st.session_state:
-                    del st.session_state["team_select"]
+
+                # Set reset flag
+                st.session_state.reset_form = True
                 st.rerun()
+
             else:
                 st.error(f"Submission failed. Status Code: {response.status_code}")
 
         except Exception as e:
             st.error(f"Network error during submission: {e}")
 
-st.divider()
+# ==========================================
+# RESET FORM AFTER RERUN (SAFE METHOD)
+# ==========================================
+if st.session_state.reset_form:
+    st.session_state.team_select = []
+    st.session_state.reset_form = False
 
 # ==========================================
-# 5. PREMIUM LIVE DASHBOARD
+# LIVE DASHBOARD (GRAPH WILL ALWAYS UPDATE)
 # ==========================================
+st.divider()
 st.markdown("### Live Leaderboard")
 
 try:
+    # Always fetch fresh data
     df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
 
     if not df.empty and len(df.columns) >= 4:
         magic_column = df.columns[3]
+
         all_votes = df[magic_column].dropna().astype(str)
         split_votes = all_votes.str.split(',').explode().str.strip()
 
         col_sort, col_slider = st.columns([1, 1])
 
         with col_sort:
-            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+            sort_order = st.selectbox(
+                "Sort By:",
+                ["Most Votes", "Alphabetical"]
+            )
 
         with col_slider:
             top_n = st.slider("Display Top:", 5, 100, 30, 5)
@@ -517,9 +534,13 @@ try:
             df_plot.columns = ['Designation', 'Votes']
 
             if sort_order == "Most Votes":
-                df_plot = df_plot.sort_values(by='Votes', ascending=True)
+                df_plot = df_plot.sort_values(
+                    by='Votes', ascending=True
+                )
             else:
-                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+                df_plot = df_plot.sort_values(
+                    by='Designation', ascending=False
+                )
 
             fig = px.bar(
                 df_plot,
@@ -564,6 +585,7 @@ try:
                 use_container_width=True,
                 config={"displayModeBar": False}
             )
+
         else:
             st.info("No votes logged yet.")
 
@@ -571,4 +593,5 @@ try:
         st.info("Database empty.")
 
 except Exception as e:
-    st.warning(f"Dashboard offline: {e}")
+    st.warning(f"Dashboard fetch error: {e}")
+
