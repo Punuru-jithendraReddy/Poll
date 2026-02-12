@@ -8,7 +8,7 @@ import time
 # ==========================================
 # 1. PAGE SETUP
 # ==========================================
-st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="wide")
 
 # ==========================================
 # 2. GLOBAL STATE & CONFIG
@@ -19,7 +19,7 @@ def get_global_config():
 
 global_config = get_global_config()
 
-# Local session state initialization
+# Initialize Session State
 if "team_select" not in st.session_state: st.session_state.team_select = []
 if "recent_submissions" not in st.session_state: st.session_state.recent_submissions = [] 
 if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
@@ -50,7 +50,7 @@ USER_EMAILS = {
     "Venkateswara Rao": "Venkat.Goriparthi@svarappstech.com"
 }
 
-# (Truncated for brevity, assuming standard lists as before)
+# Standard Team List
 TEAM_NAMES = [
     "Reactor Core", "Apex Sync", "Pixel Forge", "Zero Gravity", "Ignition Squad", "Adrenaline Cartel", 
     "Logic Pulse", "Node Builders", "Venom Lab", "Kinetic Forge", "Quantum Delivery", "Adrenaline Catalyst", 
@@ -93,248 +93,213 @@ TEAM_NAMES = [
 ]
 
 # ==========================================
-# 4. ADMIN & CONFIGURATION SIDEBAR
+# 4. ADMIN & CONFIG
 # ==========================================
 with st.sidebar:
     st.header("Admin Access")
     admin_pw = st.text_input("Password", type="password")
-    
     is_admin = (admin_pw == "admin123")
     
     if is_admin:
-        st.success("Authorized")
+        st.success("Access Granted")
         st.divider()
-        st.subheader("⚠️ Form Configuration")
+        st.subheader("⚙️ Form Settings")
         
-        # --- CONFIGURABLE IDs ---
+        # DEFAULT IDs - CHANGED TO THE ONES FROM YOUR LINK
         conf_form_url = st.text_input("Form URL", value="https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse")
         conf_sheet_url = st.text_input("Sheet CSV URL", value="https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv")
         
-        st.markdown("**Entry IDs (From your URL)**")
+        st.markdown("**Entry IDs (From your pre-filled link)**")
         conf_entry_name = st.text_input("Name ID", value="entry.1398544706")
-        conf_entry_magic = st.text_input("Team Selection ID", value="entry.921793836")
+        conf_entry_magic = st.text_input("Team ID", value="entry.921793836")
         
-        # --- FIX FOR 400 ERROR ---
         st.divider()
-        st.markdown("**Does your Google Form collect emails?**")
-        st.caption("If your form setting 'Collect email addresses' is OFF, uncheck this box. Otherwise, the form will reject the data.")
-        conf_send_email = st.checkbox("Send Email to Google?", value=False) # DEFAULT FALSE TO FIX CRASH
-        
-        if conf_send_email:
-            conf_entry_email = st.text_input("Email ID (e.g. emailAddress)", value="emailAddress")
-        else:
-            conf_entry_email = None
-
-        st.divider()
-        st.subheader("Timer Controls")
-        
+        st.subheader("⏱️ Timer Controls")
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
-        col_start, col_stop = st.columns(2)
-        with col_start:
-            if st.button("Start / Reset"):
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Start Timer"):
                 global_config["end_time"] = time.time() + (new_duration * 60)
                 global_config["is_active"] = True
                 st.rerun()
-        with col_stop:
-            if st.button("Stop"):
+        with c2:
+            if st.button("Stop Timer"):
                 global_config["is_active"] = False
                 global_config["end_time"] = None
                 st.rerun()
-                
     else:
-        # Defaults if not logged in (User cannot see config)
+        # HARDCODED DEFAULTS (So it works without Admin login)
         conf_form_url = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
         conf_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
         conf_entry_name = "entry.1398544706"
         conf_entry_magic = "entry.921793836"
-        conf_entry_email = None # Default to None (Don't send email)
-        conf_send_email = False
 
 # ==========================================
 # 5. TIMER WATCHDOG
 # ==========================================
 st.title("Identity Intel")
-st.caption("Choose your team name wisely")
+st.caption("Operative Selection Dashboard")
 
 @st.fragment(run_every=1)
-def timer_status_panel():
-    current_is_active = global_config["is_active"]
-    current_end_time = global_config["end_time"]
-    time_left = (current_end_time - time.time()) if current_end_time else 0
-    real_time_is_open = current_is_active and (time_left > 0)
-    
-    if real_time_is_open != st.session_state.last_known_is_open:
-        st.session_state.last_known_is_open = real_time_is_open
-        st.rerun()
+def timer_panel():
+    if global_config["is_active"] and global_config["end_time"]:
+        remaining = global_config["end_time"] - time.time()
+        is_open = remaining > 0
+        
+        if is_open:
+            mins, secs = divmod(int(remaining), 60)
+            st.markdown(f"""
+            <div style="background:#e3f2fd;padding:15px;border-radius:10px;text-align:center;border:1px solid #90caf9;">
+                <h3 style="margin:0;color:#1565c0;">⏳ {mins:02d}:{secs:02d}</h3>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.error("⛔ MISSION WINDOW CLOSED")
+            if st.session_state.last_known_is_open: # Only rerun on state change
+                st.session_state.last_known_is_open = False
+                st.rerun()
+                
+        # Sync state
+        if is_open != st.session_state.last_known_is_open:
+            st.session_state.last_known_is_open = is_open
+            st.rerun()
 
-    if real_time_is_open:
-        mins, secs = divmod(int(time_left), 60)
-        timer_text = f"{mins:02d}:{secs:02d}"
-        st.markdown(f"""
-        <div style="background-color:#e6fffa;padding:15px;border-radius:8px;border-left:5px solid #00bfa5;text-align:center;margin-bottom:20px;">
-            <div style="font-size:14px;color:#444;font-weight:bold;">TIME REMAINING</div>
-            <div style="font-size:32px;font-weight:800;color:#00796b;font-family:monospace;">{timer_text}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.error("⛔ **TIME UP! Submissions Closed.**")
-
-timer_status_panel()
+timer_panel()
 
 # ==========================================
-# 6. MAIN APP LOGIC
+# 6. MAIN APPLICATION
 # ==========================================
 is_open = st.session_state.last_known_is_open
 
 if st.session_state.success_flag:
-    st.toast("✅ Submitted successfully!", icon="🎉")
+    st.toast("✅ Mission Data Uploaded Successfully!", icon="🚀")
     st.session_state.success_flag = False
 
-col_name, col_email = st.columns(2)
-with col_name:
-    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES, disabled=not is_open)
-with col_email:
-    current_email = USER_EMAILS.get(user_name, "") if user_name != "Select identity..." else ""
-    user_email = st.text_input("Corporate Email", value=current_email, disabled=True)
+# Inputs
+c_name, c_email = st.columns(2)
+with c_name:
+    user_name = st.selectbox("Operative Identity", ["Select identity..."] + USER_NAMES, disabled=not is_open)
+with c_email:
+    # Auto-fill email but DO NOT SEND IT TO GOOGLE to avoid 400 Error
+    current_email = USER_EMAILS.get(user_name, "")
+    user_email = st.text_input("Encrypted Channel (Email)", value=current_email, disabled=True)
 
-# Suggestions Logic 
-USER_SUGGESTIONS = {} 
-forbidden_teams = [] 
-allowed_teams = TEAM_NAMES 
-st.session_state.team_select = [t for t in st.session_state.team_select if t in allowed_teams]
+# Team Selection
+st.markdown("### Target Acquisition")
+final_selections = st.multiselect(
+    "Select Targets", options=TEAM_NAMES, key="team_select", 
+    label_visibility="collapsed", placeholder="Select targets...", disabled=not is_open
+)
 
-with st.expander("Bulk Import"):
-    pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
-    if st.button("Process Data", disabled=not is_open):
-        clean_allowed = {t.strip().lower(): t for t in allowed_teams}
+# Bulk Import
+with st.expander("Bulk Data Upload"):
+    pasted_data = st.text_area("Paste List", height=100, disabled=not is_open)
+    if st.button("Process Bulk Data", disabled=not is_open):
+        clean_allowed = {t.strip().lower(): t for t in TEAM_NAMES}
         matched = []
         if pasted_data:
             for line in pasted_data.replace('\r', '\n').split('\n'):
                 cl = line.strip().lower()
                 if cl in clean_allowed: matched.append(clean_allowed[cl])
             st.session_state.team_select = list(set(st.session_state.team_select + matched))
-            st.success(f"Matched {len(matched)}.")
             st.rerun()
 
-st.markdown("### Target Selection")
-final_selections = st.multiselect(
-    "Combobox", options=allowed_teams, key="team_select", label_visibility="collapsed",
-    placeholder="Select teams...", disabled=not is_open
-)
-
-# --- SMART SUBMISSION LOGIC (ROBUST RETRY) ---
-def submit_data_smartly(url, email_id, email_val, name_id, name_val, magic_id, magic_val, should_send_email):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": url
-    }
+# --- CLASSIC SUBMISSION LOGIC (The Fix) ---
+def submit_classic(url, name_id, name_val, team_id, team_list):
+    headers = {"User-Agent": "Mozilla/5.0"}
     
-    # Payload Base: Name Only
-    payload = {
-        name_id: name_val
-    }
+    # 1. Base Payload (Name)
+    payload = {name_id: name_val}
     
-    # Only add email if configured to do so
-    if should_send_email and email_id:
-        payload[email_id] = email_val
+    # 2. Add Teams (The Request library handles lists correctly for checkboxes)
+    # This sends entry.123=TeamA&entry.123=TeamB
+    payload[team_id] = team_list
     
-    # ATTEMPT 1: Checkbox Style (List)
+    # 3. NO EMAIL in payload (Fixes 400 error if form doesn't collect emails)
+    
     try:
-        # Add magic data as list (requests handles this as entry=A&entry=B)
-        payload[magic_id] = magic_val 
-        response = requests.post(url, data=payload, headers=headers, timeout=8)
+        response = requests.post(url, data=payload, headers=headers, timeout=10)
         response.raise_for_status()
         return True, "Success"
     except requests.exceptions.HTTPError as e:
-        # If 400, it might be the format
-        if e.response.status_code == 400:
-            try:
-                # ATTEMPT 2: String Style (For Text/Paragraph Questions)
-                payload[magic_id] = ", ".join(magic_val)
-                response = requests.post(url, data=payload, headers=headers, timeout=8)
-                response.raise_for_status()
-                return True, "Success (Retry Mode)"
-            except:
-                pass # Fail through to return original error
-        return False, f"Google Rejected Data (400). ERROR: Verify IDs. Is Email Config Correct? (Error: {e})"
+        return False, f"Google Rejected (400). Error: {e}"
     except Exception as e:
         return False, f"Connection Error: {e}"
 
 st.write("")
 if is_open:
-    if st.button("Submit Selections", type="primary", use_container_width=True):
-        
-        if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
-            st.error("⚠️ Submission window closed just now.")
-            time.sleep(2)
-            st.rerun()
-        elif user_name == "Select identity..." or not user_email:
-            st.error("Name and Email required.")
+    if st.button("EXECUTE MISSION (SUBMIT)", type="primary", use_container_width=True):
+        if user_name == "Select identity...":
+            st.error("Identity Verification Failed: Select Name.")
         elif not final_selections:
-            st.error("Select at least one target.")
+            st.error("No Targets Selected.")
         else:
-            t_mail = user_email.strip().lower()
+            success, msg = submit_classic(
+                conf_form_url,
+                conf_entry_name, user_name,
+                conf_entry_magic, final_selections
+            )
             
-            if t_mail in st.session_state.submitted_emails:
-                st.error("Already submitted (Local Check).")
+            if success:
+                st.session_state.submitted_emails.add(user_email)
+                st.session_state.recent_submissions.extend(final_selections)
+                st.session_state.team_select = []
+                st.session_state.success_flag = True
+                st.rerun()
             else:
-                # USE CONFIGURABLE IDs
-                success, msg = submit_data_smartly(
-                    conf_form_url, 
-                    conf_entry_email, user_email, 
-                    conf_entry_name, user_name, 
-                    conf_entry_magic, final_selections,
-                    conf_send_email # Pass the flag from config
-                )
-                
-                if success:
-                    st.session_state.submitted_emails.add(t_mail)
-                    st.session_state.recent_submissions.extend(final_selections)
-                    st.session_state.team_select = []
-                    st.session_state.success_flag = True
-                    st.rerun()
-                else:
-                    st.error(f"❌ {msg}")
-                    if is_admin:
-                        st.warning("Admin Tip: Uncheck 'Send Email to Google' in the sidebar if your form is anonymous.")
+                st.error(f"❌ Transmission Failed: {msg}")
 else:
-    st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
+    st.button("⛔ MISSION WINDOW CLOSED", disabled=True, use_container_width=True)
 
 st.divider()
 
 # ==========================================
-# 7. LIVE DASHBOARD (AUTO-REFRESHING)
+# 7. LIVE DASHBOARD
 # ==========================================
-@st.fragment(run_every=3)
+@st.fragment(run_every=2)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
     try:
-        try:
-            # Use Configurable Sheet URL
-            df = pd.read_csv(f"{conf_sheet_url}&t={int(time.time())}", on_bad_lines='skip')
-            if not df.empty and len(df.columns) >= 4:
-                # Assuming standard layout, column 3 (index 3, which is 4th col) is usually the answer
-                s_votes = df[df.columns[3]].dropna().astype(str).str.split(',').explode().str.strip().tolist()
-            else: 
-                s_votes = []
-        except:
-            s_votes = []
+        # Load Data
+        df = pd.read_csv(f"{conf_sheet_url}&t={int(time.time())}", on_bad_lines='skip')
         
-        total = s_votes + st.session_state.recent_submissions
+        # Process Google Sheet Data
+        sheet_votes = []
+        if not df.empty and len(df.columns) >= 3: # Ensure enough columns
+            # Column index 2 is usually the 3rd column (Team Selection)
+            # Adjust if your sheet is different
+            col_idx = 2 if len(df.columns) > 2 else -1
+            if col_idx != -1:
+                sheet_votes = df.iloc[:, col_idx].dropna().astype(str).str.split(',').explode().str.strip().tolist()
+
+        # Merge with Local Session
+        total_votes = sheet_votes + st.session_state.recent_submissions
         
-        if total:
-            vc = pd.DataFrame(total, columns=['D']).value_counts().reset_index()
-            vc.columns = ['Designation', 'Votes']
-            vc = vc.sort_values('Votes', ascending=True).tail(20) 
+        if total_votes:
+            # Count & Sort
+            vc = pd.DataFrame(total_votes, columns=['Team']).value_counts().reset_index()
+            vc.columns = ['Team', 'Votes']
             
-            fig = px.bar(vc, x='Votes', y='Designation', orientation='h', text='Votes')
+            # Sort Descending (Highest on Top)
+            # In Plotly Horizontal Bar, the bottom of the list is the top of the chart.
+            # So we sort Ascending (Small -> Large) so Large is at the "end" (Top).
+            vc = vc.sort_values('Votes', ascending=True).tail(15)
+            
+            fig = px.bar(vc, x='Votes', y='Team', orientation='h', text='Votes')
             fig.update_traces(marker_color='#FF4B4B', textposition='outside')
-            fig.update_layout(height=max(300, len(vc)*35), yaxis={'title':''}, plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0,r=0,t=0,b=0))
+            fig.update_layout(
+                height=max(400, len(vc)*40), 
+                yaxis={'title':''}, 
+                xaxis={'title':''},
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=0, b=0)
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No votes recorded yet.")
+            st.info("Awaiting Data...")
             
-    except Exception as e:
-        st.warning("Dashboard syncing...")
+    except Exception:
+        # Silent fail for dashboard to prevent UI flickering
+        pass
 
 live_dashboard()
