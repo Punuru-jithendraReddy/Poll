@@ -117,7 +117,7 @@ def process_bulk_import(pasted_data, allowed_teams):
 # 4. PRIMARY APPLICATION
 # ==========================================
 st.title("Identity Intel")
-st.caption("Secure Team Designation Portal")
+st.caption("Choose your team name wisely")
 
 col_name, col_email = st.columns(2)
 with col_name:
