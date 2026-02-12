@@ -91,7 +91,6 @@ st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centere
 
 @st.cache_resource
 def get_global_config():
-    # Stores the end_time (Unix timestamp) and active status
     return {"end_time": None, "is_active": False}
 
 global_config = get_global_config()
@@ -103,6 +102,9 @@ if "recent_submissions" not in st.session_state:
     st.session_state.recent_submissions = [] 
 if "submitted_emails" not in st.session_state:
     st.session_state.submitted_emails = set()
+# State for handling success message persistence
+if "success_flag" not in st.session_state:
+    st.session_state.success_flag = False
 
 # ==========================================
 # 4. ADMIN PANEL (SIDEBAR)
@@ -116,7 +118,6 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Timer Controls")
         
-        # Calculate status
         now = time.time()
         time_remaining = 0
         if global_config["is_active"] and global_config["end_time"]:
@@ -127,21 +128,18 @@ with st.sidebar:
         else:
             st.warning("Timer Stopped / Expired")
 
-        # Start New Timer
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
         if st.button("Start / Reset Timer"):
             global_config["end_time"] = time.time() + (new_duration * 60)
             global_config["is_active"] = True
             st.rerun()
 
-        # Stop Timer
         if st.button("Stop Immediately"):
             global_config["is_active"] = False
             global_config["end_time"] = None
             st.rerun()
                 
         st.markdown("---")
-        # Extend Timer
         extend_min = st.number_input("Extend by (mins)", min_value=1, value=5, step=1)
         if st.button("Extend Time"):
             if global_config["is_active"] and global_config["end_time"]:
@@ -155,12 +153,19 @@ with st.sidebar:
                 st.error("Start timer first.")
 
 # ==========================================
-# 5. JAVASCRIPT COUNTDOWN & VISUALS
+# 5. HEADER & SUCCESS MESSAGE
 # ==========================================
 st.title("Identity Intel")
 st.caption("Choose your team name wisely")
 
-# Logic to determine if submission is allowed
+# Check if a successful submission just happened
+if st.session_state.success_flag:
+    st.success("✅ Submitted successfully!")
+    st.session_state.success_flag = False
+
+# ==========================================
+# 6. JAVASCRIPT COUNTDOWN & VISUALS
+# ==========================================
 current_time = time.time()
 is_open = False
 
@@ -168,7 +173,6 @@ if global_config["is_active"] and global_config["end_time"]:
     if current_time < global_config["end_time"]:
         is_open = True
         
-        # --- THE MAGIC JAVASCRIPT TIMER (COMPACT VERSION) ---
         timer_html = f"""
         <div style="
             background-color: #f0f2f6; 
@@ -207,14 +211,14 @@ if global_config["is_active"] and global_config["end_time"]:
         }}, 1000);
         </script>
         """
-        components.html(timer_html, height=60) # Reduced height
+        components.html(timer_html, height=60)
     else:
         st.error("⛔ **TIME UP! Submissions are closed.**")
 else:
     st.info("⏸️ **Submissions are currently paused.**")
 
 # ==========================================
-# 6. MAIN FORM
+# 7. MAIN FORM
 # ==========================================
 col_name, col_email = st.columns(2)
 with col_name:
@@ -248,13 +252,12 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# 7. SUBMIT BUTTON (SECURED)
+# 8. SUBMIT BUTTON (SECURED)
 # ==========================================
 st.write("")
 if is_open:
     if st.button("Submit Selections", type="primary", use_container_width=True):
         
-        # Double check timer server-side
         if time.time() > global_config["end_time"]:
             st.error("Time expired!")
             st.rerun()
@@ -264,14 +267,12 @@ if is_open:
         elif not final_selections:
             st.error("Select at least one target.")
         else:
-            # 1. CLEAN EMAIL
             t_mail = user_email.strip().lower()
             
-            # 2. VALIDATE EMAIL DOMAIN (@svarappstech.com)
+            # Email Validation
             if not re.match(r"^[a-z0-9_.+-]+@svarappstech\.com$", t_mail):
                  st.error("Invalid email. Only @svarappstech.com emails are allowed.")
             else:
-                # Duplicate check
                 is_dup = False
                 if t_mail in st.session_state.submitted_emails: is_dup = True
                 
@@ -281,7 +282,7 @@ if is_open:
                         if (df.astype(str).apply(lambda x: x.str.strip().str.lower()) == t_mail).any().any():
                             is_dup = True
                     except: 
-                        pass # SILENT FAILURE
+                        pass 
                 
                 if is_dup:
                     st.error("Already submitted.")
@@ -289,20 +290,22 @@ if is_open:
                     try:
                         payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
                         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+                        
+                        # UPDATE LOCAL STATE AND REFRESH
                         st.session_state.submitted_emails.add(t_mail)
                         st.session_state.recent_submissions.extend(final_selections)
                         st.session_state.team_select = []
-                        st.success("Submitted successfully!") # SUCCESS MESSAGE IS KEPT
-                        st.rerun()
+                        st.session_state.success_flag = True # Set flag for next run
+                        st.rerun() # Forces dashboard update and shows success message
                     except:
-                        pass # SILENT FAILURE (No Network Error Msg)
+                        pass
 else:
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
 st.divider()
 
 # ==========================================
-# 8. DASHBOARD
+# 9. DASHBOARD
 # ==========================================
 st.markdown("### Live Leaderboard")
 try:
@@ -311,7 +314,9 @@ try:
         s_votes = df[df.columns[3]].dropna().astype(str).str.split(',').explode().str.strip().tolist()
     else: s_votes = []
     
+    # Combined: Server Votes + Local Session Votes (for instant update)
     total = s_votes + st.session_state.recent_submissions
+    
     if total:
         vc = pd.DataFrame(total, columns=['D']).value_counts().reset_index()
         vc.columns = ['Designation', 'Votes']
@@ -329,4 +334,4 @@ try:
     else:
         st.info("No votes yet.")
 except:
-    pass # SILENT FAILURE (No Dashboard Error Msg)
+    pass
