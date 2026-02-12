@@ -144,7 +144,7 @@ with st.sidebar:
         if st.button("Extend Time"):
             if global_config["is_active"] and global_config["end_time"]:
                 if time_remaining <= 0:
-                     global_config["end_time"] = time.time() + (extend_min * 60)
+                      global_config["end_time"] = time.time() + (extend_min * 60)
                 else:
                     global_config["end_time"] += (extend_min * 60)
                 st.success("Extended!")
@@ -296,6 +296,11 @@ if is_open:
                         st.session_state.recent_submissions.extend(final_selections)
                         st.session_state.team_select = []
                         st.session_state.success_flag = True # Set flag for next run
+                        
+                        # --- NOTIFICATION FIX ---
+                        st.toast("✅ Form Successfully Submitted!", icon="🎉")
+                        time.sleep(1) # Brief pause to ensure toast triggers before rerun
+                        
                         st.rerun() # Forces dashboard update and shows success message
                     except:
                         pass
@@ -325,7 +330,19 @@ try:
         with col_s: sort = st.selectbox("Sort", ["Most Votes", "A-Z"])
         with col_sl: top = st.slider("Show", 5, 50, 20)
         
-        vc = vc.sort_values('Votes' if sort == "Most Votes" else 'Designation', ascending=sort!="Most Votes").head(top)
+        # --- GRAPH SORT FIX ---
+        # Plotly Horizontal Bar: 
+        # Bottom of Y-axis = Index 0
+        # Top of Y-axis = Index N
+        # We want Highest Votes at Top. So Highest Votes must be at Index N.
+        # Therefore, we sort by Votes in ASCENDING order (Small -> Large).
+        
+        if sort == "Most Votes":
+             vc = vc.sort_values('Votes', ascending=True).tail(top)
+        else:
+             # For A-Z, we usually want A at top. 
+             # So we sort Z->A (Descending) so A is at the end (Top of graph)
+             vc = vc.sort_values('Designation', ascending=False).tail(top)
         
         fig = px.bar(vc, x='Votes', y='Designation', orientation='h', text='Votes')
         fig.update_traces(marker_color='#FF4B4B', textposition='outside')
