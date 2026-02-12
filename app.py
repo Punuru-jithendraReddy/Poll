@@ -224,8 +224,7 @@ col_name, col_email = st.columns(2)
 with col_name:
     user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
 with col_email:
-    user_email = st.text_input("Corporate Email", placeholder="agent@svarsppstech.com")
-    
+    user_email = st.text_input("Corporate Email", placeholder="agent@svarappstech.com")
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
@@ -269,35 +268,39 @@ if is_open:
             st.error("Name and Email required.")
         elif not final_selections:
             st.error("Select at least one target.")
-        elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarsppstech\.com$", user_email):
-                
-            st.error("Invalid email. Only @svarsppstech.com emails are allowed.")
         else:
-            # Duplicate check
-            is_dup = False
+            # 1. CLEAN EMAIL
             t_mail = user_email.strip().lower()
-            if t_mail in st.session_state.submitted_emails: is_dup = True
             
-            if not is_dup:
-                try:
-                    df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
-                    if (df.astype(str).apply(lambda x: x.str.strip().str.lower()) == t_mail).any().any():
-                        is_dup = True
-                except: pass
-            
-            if is_dup:
-                st.error("Already submitted.")
+            # 2. VALIDATE EMAIL DOMAIN (CORRECTED)
+            if not re.match(r"^[a-z0-9_.+-]+@svarappstech\.com$", t_mail):
+                 st.error("Invalid email. Only @svarappstech.com emails are allowed.")
             else:
-                try:
-                    payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
-                    requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
-                    st.session_state.submitted_emails.add(t_mail)
-                    st.session_state.recent_submissions.extend(final_selections)
-                    st.session_state.team_select = []
-                    st.success("Submitted successfully!")
-                    st.rerun()
-                except:
-                    st.warning("Network error, try again.")
+                # Duplicate check
+                is_dup = False
+                if t_mail in st.session_state.submitted_emails: is_dup = True
+                
+                if not is_dup:
+                    try:
+                        df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
+                        if (df.astype(str).apply(lambda x: x.str.strip().str.lower()) == t_mail).any().any():
+                            is_dup = True
+                    except: pass
+                
+                if is_dup:
+                    st.error("Already submitted.")
+                else:
+                    try:
+                        # Send original email (with case preserved if needed) or lowercased
+                        payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
+                        requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+                        st.session_state.submitted_emails.add(t_mail)
+                        st.session_state.recent_submissions.extend(final_selections)
+                        st.session_state.team_select = []
+                        st.success("Submitted successfully!")
+                        st.rerun()
+                    except:
+                        st.warning("Network error, try again.")
 else:
     # Disabled button when closed
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
