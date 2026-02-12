@@ -148,7 +148,7 @@ with st.sidebar:
 # 5. WATCHDOG + TIMER (THE SYNC FIX)
 # ==========================================
 st.title("Identity Intel")
-st.caption("Choose your team name wisely")
+st.caption("Choose your team name wisely, as it reflects your vision, strength, and ambition")
 
 # This fragment runs EVERY 1 SECOND.
 # It acts as a "Watchdog": If the Global State (Admin stopped) 
