@@ -292,10 +292,10 @@ if is_open:
                         st.session_state.submitted_emails.add(t_mail)
                         st.session_state.recent_submissions.extend(final_selections)
                         st.session_state.team_select = []
-                        st.success("Submitted successfully!")
+                        st.success("Submitted successfully!") # SUCCESS MESSAGE IS KEPT
                         st.rerun()
                     except:
-                        pass # SILENT FAILURE
+                        pass # SILENT FAILURE (No Network Error Msg)
 else:
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
@@ -329,4 +329,4 @@ try:
     else:
         st.info("No votes yet.")
 except:
-    pass # SILENT FAILURE
+    pass # SILENT FAILURE (No Dashboard Error Msg)
