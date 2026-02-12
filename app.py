@@ -6,18 +6,39 @@ import plotly.express as px
 import time
 
 # ==========================================
-# 1. SYSTEM CONFIGURATION
+# 1. PAGE SETUP
+# ==========================================
+st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
+
+# ==========================================
+# 2. GLOBAL STATE & CONFIG
+# ==========================================
+# This allows the Timer to work across all users
+@st.cache_resource
+def get_global_config():
+    return {"end_time": None, "is_active": False}
+
+global_config = get_global_config()
+
+# Initialize Session State
+if "team_select" not in st.session_state: st.session_state.team_select = []
+if "recent_submissions" not in st.session_state: st.session_state.recent_submissions = [] 
+if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
+if "success_flag" not in st.session_state: st.session_state.success_flag = False
+# Track previous state to trigger re-runs when timer expires
+if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
+
+# ==========================================
+# 3. SYSTEM CONFIGURATION (Your Working URLs)
 # ==========================================
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 ENTRY_EMAIL = "emailAddress"
 ENTRY_NAME = "entry.1398544706"
 ENTRY_MAGIC = "entry.921793836"
-
-# Using the CSV export link
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
 
 # ==========================================
-# 2. MASTER DATA
+# 4. MASTER DATA
 # ==========================================
 USER_NAMES = [
     "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
@@ -25,6 +46,22 @@ USER_NAMES = [
     "Shreya Singh", "Tharuni Vallepi", "Saumya Lailamony",
     "Monisha", "Vijay Sai"
 ]
+
+# Map names to emails for Auto-Fill Feature
+USER_EMAILS = {
+    "Saumya Lailamony": "Saumya.Lailamony@svarappstech.com",
+    "Tharuni Vallepi": "Tharuni.Vallepi@svarappstech.com",
+    "Shreya Singh": "Shreya.Singh@svarappstech.com",
+    "Bhavana Lanka": "Bhavana.lanka@svarappstech.com",
+    "Monisha": "Monisha.krishnamurthy@svarappstech.com",
+    "Jithendra reddy": "Jithendra.R@svarappstech.com",
+    "Shaik Afroz": "Afroz.S@svarappstech.com",
+    "Sravanthi Chapram": "Sravanthi.Chapram@svarappstech.com",
+    "B. Shrineeth Reddy": "Shrineeth.R@svarappstech.com",
+    "Saikiran Kandhi": "Saikiran.K@svarappstech.com",
+    "Vijay Sai": "Vijay.Velugubantla@svarappstech.com",
+    "Venkat": "Venkat.Goriparthi@svarappstech.com"
+}
 
 TEAM_NAMES = [
     "Reactor Core", "Apex Sync", "Pixel Forge", "Zero Gravity", "Ignition Squad", "Adrenaline Cartel", 
@@ -83,47 +120,80 @@ USER_SUGGESTIONS = {
 }
 
 # ==========================================
-# 3. PAGE SETUP
+# 5. ADMIN CONTROLS (Timer)
 # ==========================================
-st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
-
-# ==========================================
-# SESSION & CACHE INIT
-# ==========================================
-if "team_select" not in st.session_state:
-    st.session_state.team_select = []
-if "recent_submissions" not in st.session_state:
-    st.session_state.recent_submissions = [] # Stores local submissions for instant feedback
-if "submitted_emails" not in st.session_state:
-    st.session_state.submitted_emails = set() # Stores emails submitted in this session
-
-# ==========================================
-# BULK IMPORT
-# ==========================================
-def process_bulk_import(pasted_data, allowed_teams):
-    clean_allowed = {t.strip().lower(): t for t in allowed_teams}
-    matched_lines = []
-    raw_lines = pasted_data.replace('\r', '\n').split('\n')
-    for line in raw_lines:
-        clean_line = line.strip().lower()
-        if clean_line and clean_line in clean_allowed:
-            matched_lines.append(clean_allowed[clean_line])
+with st.sidebar:
+    st.header("Admin Access")
+    admin_pw = st.text_input("Password", type="password")
     
-    current = st.session_state.get("team_select", [])
-    st.session_state.team_select = list(set(current + matched_lines))
-    return len(matched_lines)
+    if admin_pw == "admin123":
+        st.success("Authorized")
+        st.markdown("---")
+        st.subheader("Timer Controls")
+        
+        new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
+        
+        col_start, col_stop = st.columns(2)
+        with col_start:
+            if st.button("Start / Reset"):
+                global_config["end_time"] = time.time() + (new_duration * 60)
+                global_config["is_active"] = True
+                st.rerun()
+        with col_stop:
+            if st.button("Stop"):
+                global_config["is_active"] = False
+                global_config["end_time"] = None
+                st.rerun()
 
 # ==========================================
-# 4. PRIMARY APPLICATION
+# 6. WATCHDOG / TIMER
 # ==========================================
 st.title("Identity Intel")
 st.caption("Choose your team name wisely")
 
+@st.fragment(run_every=1)
+def timer_status_panel():
+    current_is_active = global_config["is_active"]
+    current_end_time = global_config["end_time"]
+    time_left = (current_end_time - time.time()) if current_end_time else 0
+    real_time_is_open = current_is_active and (time_left > 0)
+    
+    # Sync Main App State
+    if real_time_is_open != st.session_state.last_known_is_open:
+        st.session_state.last_known_is_open = real_time_is_open
+        st.rerun()
+
+    if real_time_is_open:
+        mins, secs = divmod(int(time_left), 60)
+        timer_text = f"{mins:02d}:{secs:02d}"
+        
+        st.markdown(f"""
+        <div style="background-color:#e6fffa;padding:15px;border-radius:8px;border-left:5px solid #00bfa5;text-align:center;margin-bottom:20px;">
+            <div style="font-size:14px;color:#444;font-weight:bold;">TIME REMAINING</div>
+            <div style="font-size:32px;font-weight:800;color:#00796b;font-family:monospace;">{timer_text}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.error("⛔ **TIME UP! Submissions Closed.**")
+
+timer_status_panel()
+
+# ==========================================
+# 7. MAIN APP LOGIC
+# ==========================================
+is_open = st.session_state.last_known_is_open
+
+if st.session_state.success_flag:
+    st.toast("✅ Submitted successfully!", icon="🎉")
+    st.session_state.success_flag = False
+
 col_name, col_email = st.columns(2)
 with col_name:
-    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
+    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES, disabled=not is_open)
 with col_email:
-    user_email = st.text_input("Corporate Email", placeholder="agent@svarsppstech.com")
+    # Auto-fill Logic Added here for convenience
+    current_email = USER_EMAILS.get(user_name, "")
+    user_email = st.text_input("Corporate Email", value=current_email, placeholder="agent@svarsppstech.com", disabled=True)
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
@@ -133,13 +203,20 @@ st.session_state.team_select = [t for t in st.session_state.team_select if t in 
 
 # Import Section
 with st.expander("Bulk Import"):
-    pasted_data = st.text_area("Paste Data", height=100)
-    if st.button("Process Data"):
+    pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
+    if st.button("Process Data", disabled=not is_open):
         if user_name == "Select identity...":
             st.warning("Please select your name first.")
         elif pasted_data:
-            count = process_bulk_import(pasted_data, allowed_teams)
-            st.success(f"Matched {count} targets.")
+            clean_allowed = {t.strip().lower(): t for t in allowed_teams}
+            matched_lines = []
+            for line in pasted_data.replace('\r', '\n').split('\n'):
+                clean_line = line.strip().lower()
+                if clean_line and clean_line in clean_allowed:
+                    matched_lines.append(clean_allowed[clean_line])
+            
+            st.session_state.team_select = list(set(st.session_state.team_select + matched_lines))
+            st.success(f"Matched {len(matched_lines)} targets.")
             st.rerun()
 
 # Selection
@@ -149,155 +226,145 @@ final_selections = st.multiselect(
     options=allowed_teams,
     key="team_select",
     label_visibility="collapsed",
-    placeholder="Search manually or review imported targets..."
+    placeholder="Search manually or review imported targets...",
+    disabled=not is_open
 )
 
 # ==========================================
-# SUBMISSION LOGIC (DUPLICATE CHECK + SILENT ERRORS)
+# SUBMISSION LOGIC
 # ==========================================
-if st.button("Submit Selections", type="primary"):
-    if user_name == "Select identity..." or not user_email:
-        st.error("Please provide Name and Email.")
-    elif not final_selections:
-        st.error("Please select at least one target.")
-    elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarsppstech\.com$", user_email):
-        st.error("Invalid email. Only @svarsppstech.com emails are allowed.")
-    else:
-        # --- DUPLICATE CHECK START ---
-        is_duplicate = False
-        target_email = user_email.strip().lower()
-
-        # 1. Local Check (Instant block if user just submitted)
-        if target_email in st.session_state.submitted_emails:
-            is_duplicate = True
-        
-        # 2. Server Check (Check Google Sheet)
-        # We wrap this in try/except to SILENTLY FAIL if network is bad
-        # If network fails, we skip duplicate check and assume valid to avoid error message
-        if not is_duplicate:
-            try:
-                # Add cache busting to attempt fresh read
-                check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
-                df = pd.read_csv(check_url, on_bad_lines='skip')
-                
-                # Sanitize
-                df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-                
-                if (df_string == target_email).any().any():
-                    is_duplicate = True
-            except:
-                # SILENT FAILURE: Do nothing, just proceed
-                pass
-        
-        # --- SUBMISSION START ---
-        if is_duplicate:
-            st.error("This email has already submitted.")
+st.write("")
+if is_open:
+    if st.button("Submit Selections", type="primary", use_container_width=True):
+        if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
+            st.error("⚠️ Submission window closed just now.")
+            time.sleep(2)
+            st.rerun()
+        elif user_name == "Select identity..." or not user_email:
+            st.error("Please provide Name and Email.")
+        elif not final_selections:
+            st.error("Please select at least one target.")
+        elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarappstech\.com$", user_email):
+             st.error("Invalid email. Only @svarappstech.com emails are allowed.")
         else:
-            payload = {
-                ENTRY_EMAIL: user_email,
-                ENTRY_NAME: user_name,
-                ENTRY_MAGIC: final_selections
-            }
-            
-            try:
-                # Fire and forget style
-                requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
-                
-                # 1. Update Local Duplicate Cache
-                st.session_state.submitted_emails.add(target_email)
+            # --- DUPLICATE CHECK START ---
+            is_duplicate = False
+            target_email = user_email.strip().lower()
 
-                # 2. Update Instant Graph Cache
-                st.session_state.recent_submissions.extend(final_selections)
+            if target_email in st.session_state.submitted_emails:
+                is_duplicate = True
+            
+            if not is_duplicate:
+                try:
+                    check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
+                    df = pd.read_csv(check_url, on_bad_lines='skip')
+                    df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
+                    if (df_string == target_email).any().any():
+                        is_duplicate = True
+                except:
+                    pass
+            
+            # --- SUBMISSION ---
+            if is_duplicate:
+                st.error("This email has already submitted.")
+            else:
+                # USING YOUR WORKING PAYLOAD STRUCTURE
+                payload = {
+                    ENTRY_EMAIL: user_email,
+                    ENTRY_NAME: user_name,
+                    ENTRY_MAGIC: final_selections
+                }
                 
-                st.success("Submission successful!")
-                st.session_state.team_select = [] # Clear form
-                
-            except:
-                # SILENT FAILURE: User asked to hide network errors
-                # If it actually fails, we just don't show the red box
-                pass
+                try:
+                    requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+                    
+                    st.session_state.submitted_emails.add(target_email)
+                    st.session_state.recent_submissions.extend(final_selections)
+                    st.session_state.team_select = []
+                    st.session_state.success_flag = True
+                    st.rerun()
+                except:
+                    # Silent failure as per your request
+                    pass
+else:
+    st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
 st.divider()
 
 # ==========================================
-# 5. LIVE DASHBOARD (INSTANT)
+# 8. LIVE DASHBOARD (AUTO-REFRESHING)
 # ==========================================
-st.markdown("### Live Leaderboard")
+@st.fragment(run_every=2)
+def live_dashboard():
+    st.markdown("### Live Leaderboard")
 
-try:
-    # 1. Load Data from Server
-    # We use a try-except block here too to prevent dashboard crashes
-    df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
-    
-    # 2. Process Server Data
-    if not df.empty and len(df.columns) >= 4:
-        magic_column = df.columns[3]
-        all_votes_series = df[magic_column].dropna().astype(str)
-        server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-    else:
-        server_votes_list = []
-
-    # 3. MERGE Local + Server Data
-    total_votes_list = server_votes_list + st.session_state.recent_submissions
-    
-    if total_votes_list:
-        # Create DataFrame from combined list
-        df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
-        vote_counts = df_combined['Designation'].value_counts()
+    try:
+        df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # Controls
-        col_sort, col_slider = st.columns([1, 1])
-        with col_sort:
-            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
-        with col_slider:
-            top_n = st.slider("Display Top:", 5, 100, 30, 5)
-
-        # Truncate
-        vote_counts = vote_counts.head(top_n)
-        
-        # Plotting
-        df_plot = vote_counts.reset_index()
-        df_plot.columns = ['Designation', 'Votes']
-
-        if sort_order == "Most Votes":
-            df_plot = df_plot.sort_values(by='Votes', ascending=True)
+        if not df.empty and len(df.columns) >= 4:
+            magic_column = df.columns[3]
+            all_votes_series = df[magic_column].dropna().astype(str)
+            server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
         else:
-            df_plot = df_plot.sort_values(by='Designation', ascending=False)
+            server_votes_list = []
 
-        fig = px.bar(
-            df_plot,
-            x="Votes",
-            y="Designation",
-            orientation="h",
-            text="Votes"
-        )
-
-        fig.update_traces(
-            marker=dict(
-                color=df_plot["Votes"],
-                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                line=dict(width=0)
-            ),
-            textposition="outside",
-            cliponaxis=False
-        )
+        total_votes_list = server_votes_list + st.session_state.recent_submissions
         
-        dynamic_height = max(300, len(df_plot) * 35)
-        fig.update_layout(
-            height=dynamic_height,
-            bargap=0.35,
-            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
-            yaxis=dict(title=""),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=0, r=0, t=20, b=0),
-            font=dict(color="#0F172A")
-        )
+        if total_votes_list:
+            df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
+            vote_counts = df_combined['Designation'].value_counts()
+            
+            col_sort, col_slider = st.columns([1, 1])
+            with col_sort:
+                sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+            with col_slider:
+                top_n = st.slider("Display Top:", 5, 100, 30, 5)
 
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    else:
-        st.info("No votes logged yet.")
+            vote_counts = vote_counts.head(top_n)
+            
+            df_plot = vote_counts.reset_index()
+            df_plot.columns = ['Designation', 'Votes']
 
-except:
-    # Silent fail for Dashboard too if needed
-    st.warning("Dashboard initializing...")
+            if sort_order == "Most Votes":
+                df_plot = df_plot.sort_values(by='Votes', ascending=True) # Ascending for BarH
+            else:
+                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+            fig = px.bar(
+                df_plot,
+                x="Votes",
+                y="Designation",
+                orientation="h",
+                text="Votes"
+            )
+
+            fig.update_traces(
+                marker=dict(
+                    color=df_plot["Votes"],
+                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                    line=dict(width=0)
+                ),
+                textposition="outside",
+                cliponaxis=False
+            )
+            
+            dynamic_height = max(300, len(df_plot) * 35)
+            fig.update_layout(
+                height=dynamic_height,
+                bargap=0.35,
+                xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+                yaxis=dict(title=""),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=20, b=0),
+                font=dict(color="#0F172A")
+            )
+
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No votes logged yet.")
+
+    except:
+        pass
+
+live_dashboard()
