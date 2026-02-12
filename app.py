@@ -26,10 +26,9 @@ if "submitted_emails" not in st.session_state: st.session_state.submitted_emails
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
-# --- NEW: ANTI-FLICKER BUFFER ---
-# We store the server data here. If the next update fails, we show this old data 
-# instead of a blank screen.
-if "server_data_buffer" not in st.session_state: st.session_state.server_data_buffer = []
+# --- THE FIX: LATCHED DATA BUFFER ---
+# This variable will ONLY update if the new data is bigger than the old data.
+if "latched_server_votes" not in st.session_state: st.session_state.latched_server_votes = []
 
 # ==========================================
 # 3. CONFIGURATION (URLS)
@@ -149,11 +148,13 @@ with st.sidebar:
 
         # FLUSH CACHE
         st.markdown("---")
-        if st.button("🧹 Force Reset Data"):
+        st.subheader("⚠️ Reset Dashboard")
+        st.caption("Since the dashboard is in 'No-Flicker Mode', it will not delete data automatically. Use this button to clear everything.")
+        if st.button("🧹 FORCE CLEAR DATA"):
             st.session_state.recent_submissions = []
             st.session_state.submitted_emails = set()
-            st.session_state.server_data_buffer = [] # Clear the Anti-Flicker Buffer
-            st.success("Data flushed.")
+            st.session_state.latched_server_votes = [] # Wipes the latch
+            st.success("Dashboard Reset Complete.")
             time.sleep(1)
             st.rerun()
 
@@ -300,9 +301,9 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (ANTI-FLICKER MODE)
+# 8. LIVE DASHBOARD (LATCH MODE)
 # ==========================================
-@st.fragment(run_every=4)
+@st.fragment(run_every=3)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
@@ -310,25 +311,22 @@ def live_dashboard():
         # 1. ATTEMPT FETCH
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE & BUFFER
+        # 2. VALIDATE & LATCH
         if not df.empty and len(df.columns) >= 4:
             magic_column = df.columns[3]
             all_votes_series = df[magic_column].dropna().astype(str)
             new_server_list = all_votes_series.str.split(',').explode().str.strip().tolist()
             
-            # SUCCESS: Update the Buffer with new data
-            st.session_state.server_data_buffer = new_server_list
-        else:
-            # FAILURE: Do nothing, keep the old buffer
-            pass
-
+            # KEY FIX: Only update if we have MORE or EQUAL data than before.
+            # Never go back to less data (prevents flickering to 0 or cached old states).
+            if len(new_server_list) >= len(st.session_state.latched_server_votes):
+                st.session_state.latched_server_votes = new_server_list
+                
     except:
-        # NETWORK ERROR: Do nothing, keep the old buffer
         pass
 
-    # 3. RENDER (Using Buffer + Local)
-    # Even if fetch failed, we have data in st.session_state.server_data_buffer
-    total_votes_list = st.session_state.server_data_buffer + st.session_state.recent_submissions
+    # 3. RENDER (Using LATCHED data + Local)
+    total_votes_list = st.session_state.latched_server_votes + st.session_state.recent_submissions
     
     if total_votes_list:
         df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
@@ -346,7 +344,7 @@ def live_dashboard():
         df_plot.columns = ['Designation', 'Votes']
 
         if sort_order == "Most Votes":
-            df_plot = df_plot.sort_values(by='Votes', ascending=True) # Ascending for BarH
+            df_plot = df_plot.sort_values(by='Votes', ascending=True)
         else:
             df_plot = df_plot.sort_values(by='Designation', ascending=False)
 
