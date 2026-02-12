@@ -17,14 +17,124 @@ GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV412
 ADMIN_PASSWORD = "admin123" 
 
 # ==========================================
-# 2. MASTER DATA
+# 2. MASTER DATA (UPDATED)
 # ==========================================
 USER_NAMES = [
-    "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
-    "Bhavana Lanka", "Sravanthi Chapram", "B. Shrineeth Reddy",
-    "Shreya Singh", "Tharuni Vallepi", "Saumya Lailamony",
-    "Monisha", "Vijay Sai"
+    "Saumya L",
+    "Tharuni",
+    "Shreya singh",
+    "Bhavana Lanka",
+    "Monisha K",
+    "Jithendra Reddy",
+    "Shaik Afroz",
+    "Sravanthi C H",
+    "Shrineeth Reddy B",
+    "Saikiran Kandhi",
+    "Velugubantla Vijay Sai",
+    "Venkateswara Rao"
 ]
+
+USER_EMAILS = {
+    "Saumya L": "Saumya.Lailamony@svarappstech.com",
+    "Tharuni": "Tharuni.Vallepi@svarappstech.com",
+    "Shreya singh": "Shreya.Singh@svarappstech.com",
+    "Bhavana Lanka": "Bhavana.lanka@svarappstech.com",
+    "Monisha K": "Monisha.krishnamurthy@svarappstech.com",
+    "Jithendra Reddy": "Jithendra.R@svarappstech.com",
+    "Shaik Afroz": "Afroz.S@svarappstech.com",
+    "Sravanthi C H": "Sravanthi.Chapram@svarappstech.com",
+    "Shrineeth Reddy B": "Shrineeth.R@svarappstech.com",
+    "Saikiran Kandhi": "Saikiran.K@svarappstech.com",
+    "Velugubantla Vijay Sai": "Vijay.Velugubantla@svarappstech.com",
+    "Venkateswara Rao": "Venkat.Goriparthi@svarappstech.com"
+}
+
+USER_SUGGESTIONS = {
+    "Saikiran Kandhi": [
+        "Reactor Core","Apex Sync","Pixel Forge","Zero Gravity","Ignition Squad",
+        "Adrenaline Cartel","Logic Pulse","Node Builders","Venom Lab","Kinetic Forge",
+        "Quantum Delivery","Adrenaline Catalyst"
+    ],
+    "Shaik Afroz": [
+        "Innovators’ Guild","FutureMakers","IdeaCatalysts","SparkLab","InsightSphere",
+        "KnowledgeCrafters","DiscoveryHub","ResearchNest","ThinkTankers","FusionWorks",
+        "CollabInnovate","NextGen Minds","Catalyst Crew","Labyrinth of Ideas",
+        "Prototype Pioneers","The Experimenters’ Guild","IdeaStormers","Odyssey R&D",
+        "Aurora Minds."
+    ],
+    "Venkateswara Rao": [
+        "InnoForge","ThinkLab","IdeaMint","BrainMatter","NextCore","CodePulse",
+        "SparkHub","LogicNest","ProtoPoint","FusionX","NexGen Lab","Innovex",
+        "R&D Squad","IdeaCell","CoreShift","PrimeMind","TechBloom","DeepThink",
+        "MindSprint","QuantumWorks","VisionCraft","NovaMinds","BlueLabs",
+        "AlphaThink","IdeaGrid."
+    ],
+    "Jithendra Reddy": [
+        "TecNovid","Tadino","C-fit","Futi","SizFin","Noviq","Lumira","Sartiq",
+        "Ventari","Aethos","Xelera","Zenvia","Lussio","Omniq","Valoria","Kinetiq",
+        "Fiora","Syntheo","Aurore","Eleviq"
+    ],
+    "Bhavana Lanka": [
+        "InnoSprint","IdeaSprint","BuildStorm","ProtoMinds","SparkShift",
+        "FutureCraft","BrightEdge","MindForge","InnoWave","ThinkStack",
+        "The Idea Arch","LogicWorks","The Solutionists","ThinkCatalyst",
+        "FutureGrid","MoonShot Makers","MindSpark","EdgeWorks",
+        "Cognitive Sparks","The Foundry","Iterate & Elevate"
+    ],
+    "Sravanthi C H": [
+        "Pro Tech","Core Collective","Smart Works","Idea Foundry","Smart Squad",
+        "Innovation Circle","Impact Team","Team Rise","New Path","Vision Works",
+        "Innovators","Growth Hub","Progress Team","Creative Pulse",
+        "Change Makers","Innovation Unit","Smart Group","Tech Circle",
+        "Pro Thinkers","Team Forward"
+    ],
+    "Shrineeth Reddy B": [
+        "Mindful Opus","Unified Ergon","A2Z_WEDO","1 4!ALL","Northfold","Nexus ops",
+        "Prime Synapse","In-various","Aegorin","Nexforge","Sfaira Infinite",
+        "No Finis","Corepath","Primevector","Axislimes","Clearframe",
+        "Varipoint","Infyline","181 Soros"
+    ],
+    "Shreya singh": [
+        "NeuraX","AetherAI","QuantumEdge","NovaMind","CyberFlux","SparkMind AI",
+        "TechNova","Digital Nexus","Hyperion Labs","Future Systems Group",
+        "IntelliTech","InfiAI","MindMesh","Brainwave","DeepLogic","ThinkAI",
+        "IncuMind","Synapse Studio","CoreTech Innovation","TechOrbit"
+    ],
+    "Tharuni": [
+        "PowerAI Nexus","Cognitive CloudWorks","FlowMind Innovators",
+        "PowerSynapse Squad","Fusion","Intelligence Team","AI-Driven Makers",
+        "CloudFlow Architects","NeuraPower Collective","IntelliPlatform Crew",
+        "AutoCloud Pioneers","Power AI Digital Team",
+        "Enterprise Intelligent Automation Council",
+        "Enterprise Power Automation and AI Office (EPAI)",
+        "Global Power Automation and AI Board (GPAI)",
+        "IntelliOps Crew","IntelliPlatform Guild","PowerSphere AI",
+        "AIFabricators","NeuroPower Makers","PowerBots Consortium",
+        "AppForge Intelligence","Digital Dynamos","Visioneers",
+        "The Byte Brigade","Power AI Pros","Core Connect","SyncUP Team"
+    ],
+    "Saumya L": [
+        "NextWave","InnovX","FutureForge","Technova","Dynamiq","Infinitum",
+        "Incubis","Ignitia","Pulseon","Techspire","PioneerX","Creatiq",
+        "Imaginex","Concepta","Datavex","Logicore","Infinitiq","Visionix",
+        "Coreon","Techvanta"
+    ],
+    "Monisha K": [
+        "InnoVortex","NovaForge","Thinkubator","IgniteX","IdeaFoundry",
+        "VisionCraft","QuantumHive","NeoGenesis","InnoCore","MindForge",
+        "FutureNest","NovaThink","AetherWorks","Nexora","Evolvex",
+        "OriginPoint","Infinitum Forge","HelixWorks","FutureWeave",
+        "Cognitiva","Zentrix","Neovex","Quantro","Virex","Axion",
+        "Orbix","Fluxa","Kinetiq","Xelion","Ultrix"
+    ],
+    "Velugubantla Vijay Sai": [
+        "NULL_STATE","8HZ","D E A D _ B I T","ISO_CHROME","PRISM_RIOT",
+        "Ambiance 1.0","Object / 001","Protocol 28","Signal & Salt",
+        "Cold Start","NOISE FLOOR","RAW INPUT","OFF GRID","T-MINUS",
+        "PAPER THIN","28°_STUDIO.","Hello Team.","The Glitch.",
+        "ROOM_204.","H Y P E R _ S O L E.","C Y P H E R _ S I N."
+    ]
+}
 
 TEAM_NAMES = [
     "Reactor Core", "Apex Sync", "Pixel Forge", "Zero Gravity", "Ignition Squad", "Adrenaline Cartel", 
@@ -66,21 +176,6 @@ TEAM_NAMES = [
     "RAW INPUT", "OFF GRID", "T-MINUS", "PAPER THIN", "28°_STUDIO.", "Hello Team.", "The Glitch.", "ROOM_204.", 
     "H Y P E R _ S O L E.", "C Y P H E R _ S I N."
 ]
-
-USER_SUGGESTIONS = {
-    "Saikiran Kandhi": ["Reactor Core","Apex Sync","Pixel Forge","Zero Gravity","Ignition Squad","Adrenaline Cartel","Logic Pulse","Node Builders","Venom Lab","Kinetic Forge","Quantum Delivery","Adrenaline Catalyst"],
-    "Shaik Afroz": ["Innovators’ Guild","FutureMakers","IdeaCatalysts","SparkLab","InsightSphere","KnowledgeCrafters","DiscoveryHub","ResearchNest","ThinkTankers","FusionWorks","CollabInnovate","NextGen Minds","Catalyst Crew","Labyrinth of Ideas","Prototype Pioneers","The Experimenters’ Guild","IdeaStormers","Odyssey R&D","Aurora Minds."],
-    "Venkat": ["InnoForge","ThinkLab","IdeaMint","BrainMatter","NextCore","CodePulse","SparkHub","LogicNest","ProtoPoint","FusionX","NexGen Lab","Innovex","R&D Squad","IdeaCell","CoreShift","PrimeMind","TechBloom","DeepThink","MindSprint","QuantumWorks","VisionCraft","NovaMinds","BlueLabs","AlphaThink","IdeaGrid."],
-    "Jithendra reddy": ["TecNovid","Tadino","C-fit","Futi","SizFin","Noviq","Lumira","Sartiq","Ventari","Aethos","Xelera","Zenvia","Lussio","Omniq","Valoria","Kinetiq","Fiora","Syntheo","Aurore","Eleviq"],
-    "Bhavana Lanka": ["InnoSprint","IdeaSprint","BuildStorm","ProtoMinds","SparkShift","FutureCraft","BrightEdge","MindForge","InnoWave","ThinkStack","The Idea Arch","LogicWorks","The Solutionists","ThinkCatalyst","FutureGrid","MoonShot Makers","MindSpark","EdgeWorks","Cognitive Sparks","The Foundry","Iterate & Elevate"],
-    "Sravanthi Chapram": ["Pro Tech","Core Collective","Smart Works","Idea Foundry","Smart Squad","Innovation Circle","Impact Team","Team Rise","New Path","Vision Works","Innovators","Growth Hub","Progress Team","Creative Pulse","Change Makers","Innovation Unit","Smart Group","Tech Circle","Pro Thinkers","Team Forward"],
-    "B. Shrineeth Reddy": ["Mindful Opus","Unified Ergon","A2Z_WEDO","1 4!ALL","Northfold","Nexus ops","Prime Synapse","In-various","Aegorin","Nexforge","Sfaira Infinite","No Finis","Corepath","Primevector","Axislimes","Clearframe","Varipoint","Infyline","181 Soros"],
-    "Shreya Singh": ["NeuraX","AetherAI","QuantumEdge","NovaMind","CyberFlux","SparkMind AI","TechNova","Digital Nexus","Hyperion Labs","Future Systems Group","IntelliTech","InfiAI","MindMesh","Brainwave","DeepLogic","ThinkAI","IncuMind","Synapse Studio","CoreTech Innovation","TechOrbit"],
-    "Tharuni Vallepi": ["PowerAI Nexus","Cognitive CloudWorks","FlowMind Innovators","PowerSynapse Squad","Fusion","Intelligence Team","AI-Driven Makers","CloudFlow Architects","NeuraPower Collective","IntelliPlatform Crew","AutoCloud Pioneers","Power AI Digital Team","Enterprise Intelligent Automation Council","Enterprise Power Automation and AI Office (EPAI)","Global Power Automation and AI Board (GPAI)","IntelliOps Crew","IntelliPlatform Guild","PowerSphere AI","AIFabricators","NeuroPower Makers","PowerBots Consortium","AppForge Intelligence","Digital Dynamos","Visioneers","The Byte Brigade","Power AI Pros","Core Connect","SyncUP Team"],
-    "Saumya Lailamony": ["NextWave","InnovX","FutureForge","Technova","Dynamiq","Infinitum","Incubis","Ignitia","Pulseon","Techspire","PioneerX","Creatiq","Imaginex","Concepta","Datavex","Logicore","Infinitiq","Visionix","Coreon","Techvanta"],
-    "Monisha": ["InnoVortex","NovaForge","Thinkubator","IgniteX","IdeaFoundry","VisionCraft","QuantumHive","NeoGenesis","InnoCore","MindForge","FutureNest","NovaThink","AetherWorks","Nexora","Evolvex","OriginPoint","Infinitum Forge","HelixWorks","FutureWeave","Cognitiva","Zentrix","Neovex","Quantro","Virex","Axion","Orbix","Fluxa","Kinetiq","Xelion","Ultrix"],
-    "Vijay Sai": ["NULL_STATE","8HZ","D E A D _ B I T","ISO_CHROME","PRISM_RIOT","Ambiance 1.0","Object / 001","Protocol 28","Signal & Salt","Cold Start","NOISE FLOOR","RAW INPUT","OFF GRID","T-MINUS","PAPER THIN","28°_STUDIO.","Hello Team.","The Glitch.","ROOM_204.","H Y P E R _ S O L E.","C Y P H E R _ S I N."]
-}
 
 # ==========================================
 # 3. GLOBAL STATE & CONFIG
@@ -148,7 +243,7 @@ with st.sidebar:
 # 5. WATCHDOG + TIMER (THE SYNC FIX)
 # ==========================================
 st.title("Identity Intel")
-st.caption("Choose your team name wisely, as it reflects your vision, strength, and ambition")
+st.caption("Choose your team name wisely")
 
 # This fragment runs EVERY 1 SECOND.
 # It acts as a "Watchdog": If the Global State (Admin stopped) 
@@ -210,10 +305,15 @@ if st.session_state.success_flag:
 
 # --- INPUT FORM ---
 col_name, col_email = st.columns(2)
+
 with col_name:
+    # 1. User selects name
     user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES, disabled=not is_open)
+
 with col_email:
-    user_email = st.text_input("Corporate Email", placeholder="agent@svarappstech.com", disabled=not is_open)
+    # 2. Email is Auto-Populated based on selection (Read Only)
+    current_email = USER_EMAILS.get(user_name, "") if user_name != "Select identity..." else ""
+    user_email = st.text_input("Corporate Email", value=current_email, disabled=True)
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
