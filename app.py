@@ -271,7 +271,7 @@ if is_open:
             st.error("Select at least one target.")
         elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarsppstech\.com$", user_email):
                 
-            st.error(""Invalid email. Only @svarsppstech.com emails are allowed.")
+            st.error("Invalid email. Only @svarsppstech.com emails are allowed.")
         else:
             # Duplicate check
             is_dup = False
