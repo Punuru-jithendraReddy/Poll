@@ -160,7 +160,7 @@ if st.button("Submit Selections", type="primary"):
         st.error("Please provide Name and Email.")
     elif not final_selections:
         st.error("Please select at least one target.")
-    elif not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user_email):
+    elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarsppstech\.com$", user_email):
         st.error("Invalid email format.")
     else:
         # --- DUPLICATE CHECK START ---
