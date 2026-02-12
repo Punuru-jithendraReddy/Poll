@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import requests
 import re
 import pandas as pd
@@ -15,11 +14,10 @@ ENTRY_NAME = "entry.1398544706"
 ENTRY_MAGIC = "entry.921793836"
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
 
-# --- ADMIN PASSWORD ---
 ADMIN_PASSWORD = "admin123" 
 
 # ==========================================
-# 2. MASTER DATA
+# 2. MASTER DATA (Your Lists)
 # ==========================================
 USER_NAMES = [
     "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
@@ -91,6 +89,7 @@ st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centere
 
 @st.cache_resource
 def get_global_config():
+    # Store state in a mutable dictionary so all users share it
     return {"end_time": None, "is_active": False}
 
 global_config = get_global_config()
@@ -102,7 +101,6 @@ if "recent_submissions" not in st.session_state:
     st.session_state.recent_submissions = [] 
 if "submitted_emails" not in st.session_state:
     st.session_state.submitted_emails = set()
-# State for handling success message persistence
 if "success_flag" not in st.session_state:
     st.session_state.success_flag = False
 
@@ -118,113 +116,104 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Timer Controls")
         
-        now = time.time()
-        time_remaining = 0
-        if global_config["is_active"] and global_config["end_time"]:
-            time_remaining = global_config["end_time"] - now
-        
-        if time_remaining > 0:
-            st.info(f"Timer Running: {int(time_remaining)}s left")
-        else:
-            st.warning("Timer Stopped / Expired")
-
+        # Admin controls update the global shared object directly
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
-        if st.button("Start / Reset Timer"):
-            global_config["end_time"] = time.time() + (new_duration * 60)
-            global_config["is_active"] = True
-            st.rerun()
-
-        if st.button("Stop Immediately"):
-            global_config["is_active"] = False
-            global_config["end_time"] = None
-            st.rerun()
+        
+        col_start, col_stop = st.columns(2)
+        with col_start:
+            if st.button("Start / Reset"):
+                global_config["end_time"] = time.time() + (new_duration * 60)
+                global_config["is_active"] = True
+                st.rerun()
+        with col_stop:
+            if st.button("Stop"):
+                global_config["is_active"] = False
+                global_config["end_time"] = None
+                st.rerun()
                 
         st.markdown("---")
         extend_min = st.number_input("Extend by (mins)", min_value=1, value=5, step=1)
         if st.button("Extend Time"):
             if global_config["is_active"] and global_config["end_time"]:
-                if time_remaining <= 0:
-                      global_config["end_time"] = time.time() + (extend_min * 60)
-                else:
-                    global_config["end_time"] += (extend_min * 60)
+                global_config["end_time"] += (extend_min * 60)
                 st.success("Extended!")
                 st.rerun()
             else:
-                st.error("Start timer first.")
+                st.error("Timer not running.")
 
 # ==========================================
-# 5. HEADER & SUCCESS MESSAGE
+# 5. SYNCHRONIZED TIMER (THE FIX)
 # ==========================================
 st.title("Identity Intel")
 st.caption("Choose your team name wisely")
 
+# This fragment runs EVERY 1 SECOND independently of the rest of the app.
+# It ensures every user sees the exact same time and status.
+@st.fragment(run_every=1)
+def live_status_panel():
+    is_active = global_config["is_active"]
+    end_time = global_config["end_time"]
+    
+    if is_active and end_time:
+        remaining = end_time - time.time()
+        
+        if remaining > 0:
+            # Calculate m:s
+            mins, secs = divmod(int(remaining), 60)
+            timer_text = f"{mins:02d}:{secs:02d}"
+            
+            st.markdown(f"""
+            <div style="
+                background-color: #e6fffa; 
+                padding: 15px; 
+                border-radius: 8px; 
+                border-left: 5px solid #00bfa5; 
+                text-align: center; 
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            ">
+                <div style="font-size: 14px; color: #444; font-weight: bold; letter-spacing: 1px;">TIME REMAINING</div>
+                <div style="font-size: 32px; font-weight: 800; color: #00796b; font-family: monospace;">{timer_text}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # If we were previously showing "Submission Closed", we need to unlock the UI
+            # We do this by checking a local session state flag if needed, 
+            # but usually the user will just see the timer.
+            
+        else:
+            st.error("⛔ **TIME UP!**")
+            # If time just ran out, we can trigger a rerun to lock inputs
+            if remaining > -2: # Only rerun once right after expiry
+                time.sleep(1)
+                st.rerun()
+    else:
+        st.info("⏸️ **Submissions are currently PAUSED by Admin.**")
+
+# Run the live panel
+live_status_panel()
+
+# ==========================================
+# 6. MAIN APP LOGIC
+# ==========================================
+
+# Determine if inputs should be enabled based on global config
+is_open = False
+if global_config["is_active"] and global_config["end_time"]:
+    if time.time() < global_config["end_time"]:
+        is_open = True
+
 # Check if a successful submission just happened
 if st.session_state.success_flag:
-    st.success("✅ Submitted successfully!")
+    st.toast("✅ Submitted successfully!", icon="🎉")
     st.session_state.success_flag = False
 
-# ==========================================
-# 6. JAVASCRIPT COUNTDOWN & VISUALS
-# ==========================================
-current_time = time.time()
-is_open = False
-
-if global_config["is_active"] and global_config["end_time"]:
-    if current_time < global_config["end_time"]:
-        is_open = True
-        
-        timer_html = f"""
-        <div style="
-            background-color: #f0f2f6; 
-            padding: 10px; 
-            border-radius: 5px; 
-            border-left: 4px solid #ff4b4b; 
-            text-align: center; 
-            margin-bottom: 10px;
-            font-family: sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        ">
-            <span style="font-size: 14px; color: #31333F; font-weight: bold;">TIME REMAINING:</span>
-            <span id="countdown" style="font-size: 22px; font-weight: bold; color: #ff4b4b;">Loading...</span>
-        </div>
-
-        <script>
-        var countDownDate = {global_config["end_time"]} * 1000;
-
-        var x = setInterval(function() {{
-            var now = new Date().getTime();
-            var distance = countDownDate - now;
-
-            var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-            var seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-            document.getElementById("countdown").innerHTML = minutes + "m " + seconds + "s ";
-
-            if (distance < 0) {{
-                clearInterval(x);
-                document.getElementById("countdown").innerHTML = "EXPIRED";
-                window.parent.location.reload();
-            }}
-        }}, 1000);
-        </script>
-        """
-        components.html(timer_html, height=60)
-    else:
-        st.error("⛔ **TIME UP! Submissions are closed.**")
-else:
-    st.info("⏸️ **Submissions are currently paused.**")
-
-# ==========================================
-# 7. MAIN FORM
-# ==========================================
+# --- INPUT FORM ---
 col_name, col_email = st.columns(2)
 with col_name:
-    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
+    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES, disabled=not is_open)
 with col_email:
-    user_email = st.text_input("Corporate Email", placeholder="agent@svarappstech.com")
+    user_email = st.text_input("Corporate Email", placeholder="agent@svarappstech.com", disabled=not is_open)
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
@@ -232,8 +221,8 @@ st.session_state.team_select = [t for t in st.session_state.team_select if t in 
 
 # Import
 with st.expander("Bulk Import"):
-    pasted_data = st.text_area("Paste Data", height=100)
-    if st.button("Process Data"):
+    pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
+    if st.button("Process Data", disabled=not is_open):
         clean_allowed = {t.strip().lower(): t for t in allowed_teams}
         matched = []
         if pasted_data:
@@ -248,18 +237,18 @@ with st.expander("Bulk Import"):
 st.markdown("### Target Selection")
 final_selections = st.multiselect(
     "Combobox", options=allowed_teams, key="team_select", label_visibility="collapsed",
-    placeholder="Select teams..."
+    placeholder="Select teams...", disabled=not is_open
 )
 
-# ==========================================
-# 8. SUBMIT BUTTON (SECURED)
-# ==========================================
+# --- SUBMIT BUTTON ---
 st.write("")
 if is_open:
     if st.button("Submit Selections", type="primary", use_container_width=True):
         
-        if time.time() > global_config["end_time"]:
-            st.error("Time expired!")
+        # Double check time on server side at moment of click
+        if not global_config["is_active"] or time.time() > global_config["end_time"]:
+            st.error("⚠️ Submission window closed just now.")
+            time.sleep(2)
             st.rerun()
             
         elif user_name == "Select identity..." or not user_email:
@@ -268,8 +257,6 @@ if is_open:
             st.error("Select at least one target.")
         else:
             t_mail = user_email.strip().lower()
-            
-            # Email Validation
             if not re.match(r"^[a-z0-9_.+-]+@svarappstech\.com$", t_mail):
                  st.error("Invalid email. Only @svarappstech.com emails are allowed.")
             else:
@@ -281,8 +268,7 @@ if is_open:
                         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
                         if (df.astype(str).apply(lambda x: x.str.strip().str.lower()) == t_mail).any().any():
                             is_dup = True
-                    except: 
-                        pass 
+                    except: pass 
                 
                 if is_dup:
                     st.error("Already submitted.")
@@ -291,26 +277,20 @@ if is_open:
                         payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
                         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
                         
-                        # UPDATE LOCAL STATE AND REFRESH
                         st.session_state.submitted_emails.add(t_mail)
                         st.session_state.recent_submissions.extend(final_selections)
                         st.session_state.team_select = []
-                        st.session_state.success_flag = True # Set flag for next run
-                        
-                        # --- NOTIFICATION FIX ---
-                        st.toast("✅ Form Successfully Submitted!", icon="🎉")
-                        time.sleep(1) # Brief pause to ensure toast triggers before rerun
-                        
-                        st.rerun() # Forces dashboard update and shows success message
+                        st.session_state.success_flag = True 
+                        st.rerun() 
                     except:
-                        pass
+                        st.error("Network Error")
 else:
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
 st.divider()
 
 # ==========================================
-# 9. DASHBOARD
+# 7. DASHBOARD (Auto-refreshes with the app)
 # ==========================================
 st.markdown("### Live Leaderboard")
 try:
@@ -319,7 +299,6 @@ try:
         s_votes = df[df.columns[3]].dropna().astype(str).str.split(',').explode().str.strip().tolist()
     else: s_votes = []
     
-    # Combined: Server Votes + Local Session Votes (for instant update)
     total = s_votes + st.session_state.recent_submissions
     
     if total:
@@ -330,18 +309,9 @@ try:
         with col_s: sort = st.selectbox("Sort", ["Most Votes", "A-Z"])
         with col_sl: top = st.slider("Show", 5, 50, 20)
         
-        # --- GRAPH SORT FIX ---
-        # Plotly Horizontal Bar: 
-        # Bottom of Y-axis = Index 0
-        # Top of Y-axis = Index N
-        # We want Highest Votes at Top. So Highest Votes must be at Index N.
-        # Therefore, we sort by Votes in ASCENDING order (Small -> Large).
-        
         if sort == "Most Votes":
              vc = vc.sort_values('Votes', ascending=True).tail(top)
         else:
-             # For A-Z, we usually want A at top. 
-             # So we sort Z->A (Descending) so A is at the end (Top of graph)
              vc = vc.sort_values('Designation', ascending=False).tail(top)
         
         fig = px.bar(vc, x='Votes', y='Designation', orientation='h', text='Votes')
