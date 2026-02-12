@@ -17,7 +17,7 @@ GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV412
 ADMIN_PASSWORD = "admin123" 
 
 # ==========================================
-# 2. MASTER DATA (Your Lists)
+# 2. MASTER DATA
 # ==========================================
 USER_NAMES = [
     "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
@@ -103,6 +103,9 @@ if "submitted_emails" not in st.session_state:
     st.session_state.submitted_emails = set()
 if "success_flag" not in st.session_state:
     st.session_state.success_flag = False
+# We track the last known state to detect changes
+if "last_known_is_open" not in st.session_state:
+    st.session_state.last_known_is_open = False
 
 # ==========================================
 # 4. ADMIN PANEL (SIDEBAR)
@@ -142,66 +145,63 @@ with st.sidebar:
                 st.error("Timer not running.")
 
 # ==========================================
-# 5. SYNCHRONIZED TIMER (THE FIX)
+# 5. WATCHDOG + TIMER (THE SYNC FIX)
 # ==========================================
 st.title("Identity Intel")
 st.caption("Choose your team name wisely")
 
-# This fragment runs EVERY 1 SECOND independently of the rest of the app.
-# It ensures every user sees the exact same time and status.
+# This fragment runs EVERY 1 SECOND.
+# It acts as a "Watchdog": If the Global State (Admin stopped) 
+# differs from what the User sees, it FORCES the whole page to reload.
 @st.fragment(run_every=1)
 def live_status_panel():
-    is_active = global_config["is_active"]
-    end_time = global_config["end_time"]
+    # 1. Calculate current real-time status
+    current_is_active = global_config["is_active"]
+    current_end_time = global_config["end_time"]
+    time_left = (current_end_time - time.time()) if current_end_time else 0
     
-    if is_active and end_time:
-        remaining = end_time - time.time()
-        
-        if remaining > 0:
-            # Calculate m:s
-            mins, secs = divmod(int(remaining), 60)
-            timer_text = f"{mins:02d}:{secs:02d}"
-            
-            st.markdown(f"""
-            <div style="
-                background-color: #e6fffa; 
-                padding: 15px; 
-                border-radius: 8px; 
-                border-left: 5px solid #00bfa5; 
-                text-align: center; 
-                margin-bottom: 20px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            ">
-                <div style="font-size: 14px; color: #444; font-weight: bold; letter-spacing: 1px;">TIME REMAINING</div>
-                <div style="font-size: 32px; font-weight: 800; color: #00796b; font-family: monospace;">{timer_text}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # If we were previously showing "Submission Closed", we need to unlock the UI
-            # We do this by checking a local session state flag if needed, 
-            # but usually the user will just see the timer.
-            
-        else:
-            st.error("⛔ **TIME UP!**")
-            # If time just ran out, we can trigger a rerun to lock inputs
-            if remaining > -2: # Only rerun once right after expiry
-                time.sleep(1)
-                st.rerun()
-    else:
-        st.info("⏸️ **Submissions are currently PAUSED by Admin.**")
+    # Is the form technically "Open" right now?
+    real_time_is_open = current_is_active and (time_left > 0)
+    
+    # 2. WATCHDOG CHECK: 
+    # If the real status differs from what the page last rendered, FORCE RERUN.
+    if real_time_is_open != st.session_state.last_known_is_open:
+        # Update local state so we don't loop forever
+        st.session_state.last_known_is_open = real_time_is_open
+        st.rerun()
 
-# Run the live panel
+    # 3. Display Timer (Only if active)
+    if real_time_is_open:
+        mins, secs = divmod(int(time_left), 60)
+        timer_text = f"{mins:02d}:{secs:02d}"
+        
+        st.markdown(f"""
+        <div style="
+            background-color: #e6fffa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border-left: 5px solid #00bfa5; 
+            text-align: center; 
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        ">
+            <div style="font-size: 14px; color: #444; font-weight: bold; letter-spacing: 1px;">TIME REMAINING</div>
+            <div style="font-size: 32px; font-weight: 800; color: #00796b; font-family: monospace;">{timer_text}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    else:
+        st.error("⛔ **TIME UP! Submissions Closed.**")
+
+# Run the watchdog/timer
 live_status_panel()
 
 # ==========================================
-# 6. MAIN APP LOGIC
+# 6. MAIN APP LOGIC (Controlled by Watchdog)
 # ==========================================
 
-# Determine if inputs should be enabled based on global config
-is_open = False
-if global_config["is_active"] and global_config["end_time"]:
-    if time.time() < global_config["end_time"]:
-        is_open = True
+# We rely on the session state flag that the Watchdog keeps updated
+is_open = st.session_state.last_known_is_open
 
 # Check if a successful submission just happened
 if st.session_state.success_flag:
@@ -242,11 +242,12 @@ final_selections = st.multiselect(
 
 # --- SUBMIT BUTTON ---
 st.write("")
+# This button is now fully controlled by 'is_open', which is synced by the Watchdog
 if is_open:
     if st.button("Submit Selections", type="primary", use_container_width=True):
         
-        # Double check time on server side at moment of click
-        if not global_config["is_active"] or time.time() > global_config["end_time"]:
+        # Double check time on server side at moment of click (Safety Net)
+        if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
             st.error("⚠️ Submission window closed just now.")
             time.sleep(2)
             st.rerun()
@@ -285,6 +286,7 @@ if is_open:
                     except:
                         st.error("Network Error")
 else:
+    # Disabled State (Visible when Watchdog disables the app)
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
 st.divider()
