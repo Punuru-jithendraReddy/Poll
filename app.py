@@ -168,26 +168,26 @@ if global_config["is_active"] and global_config["end_time"]:
     if current_time < global_config["end_time"]:
         is_open = True
         
-        # --- THE MAGIC JAVASCRIPT TIMER ---
-        # This creates a ticking clock in the browser.
-        # When it hits 0, it forces a page reload so Python can lock the button.
+        # --- THE MAGIC JAVASCRIPT TIMER (COMPACT VERSION) ---
         timer_html = f"""
         <div style="
             background-color: #f0f2f6; 
-            padding: 20px; 
-            border-radius: 10px; 
-            border-left: 5px solid #ff4b4b; 
+            padding: 10px; 
+            border-radius: 5px; 
+            border-left: 4px solid #ff4b4b; 
             text-align: center; 
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             font-family: sans-serif;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         ">
-            <div style="font-size: 16px; color: #31333F; margin-bottom: 5px;">TIME REMAINING</div>
-            <div id="countdown" style="font-size: 40px; font-weight: bold; color: #ff4b4b; line-height: 1;">Initializing...</div>
+            <span style="font-size: 14px; color: #31333F; font-weight: bold;">TIME REMAINING:</span>
+            <span id="countdown" style="font-size: 22px; font-weight: bold; color: #ff4b4b;">Loading...</span>
         </div>
 
         <script>
-        // Get end time from Python
         var countDownDate = {global_config["end_time"]} * 1000;
 
         var x = setInterval(function() {{
@@ -197,21 +197,17 @@ if global_config["is_active"] and global_config["end_time"]:
             var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
             var seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-            // Display the result
             document.getElementById("countdown").innerHTML = minutes + "m " + seconds + "s ";
 
-            // If the count down is finished
             if (distance < 0) {{
                 clearInterval(x);
                 document.getElementById("countdown").innerHTML = "EXPIRED";
-                document.getElementById("countdown").style.color = "grey";
-                // FORCE RELOAD TO LOCK PYTHON BUTTON
                 window.parent.location.reload();
             }}
         }}, 1000);
         </script>
         """
-        components.html(timer_html, height=130)
+        components.html(timer_html, height=60) # Reduced height
     else:
         st.error("⛔ **TIME UP! Submissions are closed.**")
 else:
@@ -256,12 +252,11 @@ final_selections = st.multiselect(
 # ==========================================
 st.write("")
 if is_open:
-    # Button is only visible if time remains
     if st.button("Submit Selections", type="primary", use_container_width=True):
         
-        # DOUBLE CHECK TIME ON SERVER SIDE (Security against hacking JS)
+        # Double check timer server-side
         if time.time() > global_config["end_time"]:
-            st.error("Time expired while you were clicking!")
+            st.error("Time expired!")
             st.rerun()
             
         elif user_name == "Select identity..." or not user_email:
@@ -272,7 +267,7 @@ if is_open:
             # 1. CLEAN EMAIL
             t_mail = user_email.strip().lower()
             
-            # 2. VALIDATE EMAIL DOMAIN (CORRECTED)
+            # 2. VALIDATE EMAIL DOMAIN (@svarappstech.com)
             if not re.match(r"^[a-z0-9_.+-]+@svarappstech\.com$", t_mail):
                  st.error("Invalid email. Only @svarappstech.com emails are allowed.")
             else:
@@ -285,13 +280,13 @@ if is_open:
                         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
                         if (df.astype(str).apply(lambda x: x.str.strip().str.lower()) == t_mail).any().any():
                             is_dup = True
-                    except: pass
+                    except: 
+                        pass # SILENT FAILURE
                 
                 if is_dup:
                     st.error("Already submitted.")
                 else:
                     try:
-                        # Send original email (with case preserved if needed) or lowercased
                         payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
                         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
                         st.session_state.submitted_emails.add(t_mail)
@@ -300,9 +295,8 @@ if is_open:
                         st.success("Submitted successfully!")
                         st.rerun()
                     except:
-                        st.warning("Network error, try again.")
+                        pass # SILENT FAILURE
 else:
-    # Disabled button when closed
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
 st.divider()
@@ -335,4 +329,4 @@ try:
     else:
         st.info("No votes yet.")
 except:
-    st.write("Loading stats...")
+    pass # SILENT FAILURE
