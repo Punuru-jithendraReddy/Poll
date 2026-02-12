@@ -13,7 +13,6 @@ st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centere
 # ==========================================
 # 2. GLOBAL STATE & CONFIG
 # ==========================================
-# This allows the Timer to work across all users
 @st.cache_resource
 def get_global_config():
     return {"end_time": None, "is_active": False}
@@ -25,11 +24,10 @@ if "team_select" not in st.session_state: st.session_state.team_select = []
 if "recent_submissions" not in st.session_state: st.session_state.recent_submissions = [] 
 if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
-# Track previous state to trigger re-runs when timer expires
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
 # ==========================================
-# 3. SYSTEM CONFIGURATION (Your Working URLs)
+# 3. CONFIGURATION (URLS)
 # ==========================================
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 ENTRY_EMAIL = "emailAddress"
@@ -47,7 +45,6 @@ USER_NAMES = [
     "Monisha", "Vijay Sai"
 ]
 
-# Map names to emails for Auto-Fill Feature
 USER_EMAILS = {
     "Saumya Lailamony": "Saumya.Lailamony@svarappstech.com",
     "Tharuni Vallepi": "Tharuni.Vallepi@svarappstech.com",
@@ -120,7 +117,7 @@ USER_SUGGESTIONS = {
 }
 
 # ==========================================
-# 5. ADMIN CONTROLS (Timer)
+# 5. ADMIN CONTROLS (Timer & RESET)
 # ==========================================
 with st.sidebar:
     st.header("Admin Access")
@@ -129,10 +126,10 @@ with st.sidebar:
     if admin_pw == "admin123":
         st.success("Authorized")
         st.markdown("---")
-        st.subheader("Timer Controls")
+        st.subheader("Controls")
         
+        # TIMER
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
-        
         col_start, col_stop = st.columns(2)
         with col_start:
             if st.button("Start / Reset"):
@@ -144,6 +141,16 @@ with st.sidebar:
                 global_config["is_active"] = False
                 global_config["end_time"] = None
                 st.rerun()
+
+        # FLUSH CACHE (The Fix for Flickering)
+        st.markdown("---")
+        st.warning("Maintenance")
+        if st.button("🧹 Flush/Reset App Data"):
+            st.session_state.recent_submissions = []
+            st.session_state.submitted_emails = set()
+            st.success("App cache cleared! If you deleted data in Google Sheets, it will now show empty.")
+            time.sleep(1)
+            st.rerun()
 
 # ==========================================
 # 6. WATCHDOG / TIMER
@@ -191,7 +198,6 @@ col_name, col_email = st.columns(2)
 with col_name:
     user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES, disabled=not is_open)
 with col_email:
-    # Auto-fill Logic Added here for convenience
     current_email = USER_EMAILS.get(user_name, "")
     user_email = st.text_input("Corporate Email", value=current_email, placeholder="agent@svarsppstech.com", disabled=True)
 
@@ -268,7 +274,6 @@ if is_open:
             if is_duplicate:
                 st.error("This email has already submitted.")
             else:
-                # USING YOUR WORKING PAYLOAD STRUCTURE
                 payload = {
                     ENTRY_EMAIL: user_email,
                     ENTRY_NAME: user_name,
@@ -277,14 +282,12 @@ if is_open:
                 
                 try:
                     requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
-                    
                     st.session_state.submitted_emails.add(target_email)
                     st.session_state.recent_submissions.extend(final_selections)
                     st.session_state.team_select = []
                     st.session_state.success_flag = True
                     st.rerun()
                 except:
-                    # Silent failure as per your request
                     pass
 else:
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
@@ -292,13 +295,15 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (AUTO-REFRESHING)
+# 8. LIVE DASHBOARD (SLOWED DOWN FOR STABILITY)
 # ==========================================
-@st.fragment(run_every=2)
+# Changed refresh to 5 seconds to reduce Google Cache flickering
+@st.fragment(run_every=5)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
+        # Load Server Data with TimeStamp Busting
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
         if not df.empty and len(df.columns) >= 4:
