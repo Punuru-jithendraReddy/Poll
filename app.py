@@ -21,14 +21,12 @@ global_config = get_global_config()
 
 # Initialize Session State
 if "team_select" not in st.session_state: st.session_state.team_select = []
-if "recent_submissions" not in st.session_state: st.session_state.recent_submissions = [] 
 if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
-# --- THE FIX: LATCHED DATA BUFFER ---
-# This variable will ONLY update if the new data is bigger than the old data.
-if "latched_server_votes" not in st.session_state: st.session_state.latched_server_votes = []
+# REMOVED: recent_submissions (This was causing the double-count error)
+# REMOVED: data buffers (No longer needed with Strict Sync)
 
 # ==========================================
 # 3. CONFIGURATION (URLS)
@@ -148,13 +146,9 @@ with st.sidebar:
 
         # FLUSH CACHE
         st.markdown("---")
-        st.subheader("⚠️ Reset Dashboard")
-        st.caption("Since the dashboard is in 'No-Flicker Mode', it will not delete data automatically. Use this button to clear everything.")
-        if st.button("🧹 FORCE CLEAR DATA"):
-            st.session_state.recent_submissions = []
+        if st.button("🧹 Force Reset Data"):
             st.session_state.submitted_emails = set()
-            st.session_state.latched_server_votes = [] # Wipes the latch
-            st.success("Dashboard Reset Complete.")
+            st.success("Data reset.")
             time.sleep(1)
             st.rerun()
 
@@ -242,8 +236,20 @@ final_selections = st.multiselect(
     disabled=not is_open
 )
 
+# Helper function to get current total votes from server
+def get_total_vote_count():
+    try:
+        df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
+        if not df.empty and len(df.columns) >= 4:
+            magic_column = df.columns[3]
+            all_votes = df[magic_column].dropna().astype(str).str.split(',').explode().str.strip().tolist()
+            return len(all_votes)
+        return 0
+    except:
+        return 0
+
 # ==========================================
-# SUBMISSION LOGIC
+# SUBMISSION LOGIC (Strict Sync Mode)
 # ==========================================
 st.write("")
 if is_open:
@@ -287,9 +293,24 @@ if is_open:
                 }
                 
                 try:
+                    # 1. Capture current count BEFORE submitting
+                    pre_submit_count = get_total_vote_count()
+                    
+                    # 2. SEND DATA
                     requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
                     st.session_state.submitted_emails.add(target_email)
-                    st.session_state.recent_submissions.extend(final_selections)
+                    
+                    # 3. STRICT SYNC LOOP (Wait for data to arrive)
+                    with st.spinner("📡 Encrypting & Transmitting to HQ... (Waiting for confirmation)"):
+                        # Loop for up to 10 seconds to wait for Google Sheets to update
+                        for _ in range(5):
+                            time.sleep(2) # Wait 2s
+                            current_count = get_total_vote_count()
+                            # If we see more votes than before, the data has arrived!
+                            if current_count > pre_submit_count:
+                                break
+                    
+                    # 4. DONE - Refresh the page to show new data
                     st.session_state.team_select = []
                     st.session_state.success_flag = True
                     st.rerun()
@@ -301,85 +322,81 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (LATCH MODE)
+# 8. LIVE DASHBOARD (PURE SERVER DATA)
 # ==========================================
-@st.fragment(run_every=3)
+# Run every 5 seconds to reduce flickering on normal views
+@st.fragment(run_every=5)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. ATTEMPT FETCH
+        # 1. LOAD SERVER DATA ONLY (No Local Mixing)
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE & LATCH
         if not df.empty and len(df.columns) >= 4:
             magic_column = df.columns[3]
             all_votes_series = df[magic_column].dropna().astype(str)
-            new_server_list = all_votes_series.str.split(',').explode().str.strip().tolist()
+            server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
+        else:
+            server_votes_list = []
+
+        total_votes_list = server_votes_list 
+        
+        if total_votes_list:
+            df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
+            vote_counts = df_combined['Designation'].value_counts()
             
-            # KEY FIX: Only update if we have MORE or EQUAL data than before.
-            # Never go back to less data (prevents flickering to 0 or cached old states).
-            if len(new_server_list) >= len(st.session_state.latched_server_votes):
-                st.session_state.latched_server_votes = new_server_list
-                
+            col_sort, col_slider = st.columns([1, 1])
+            with col_sort:
+                sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+            with col_slider:
+                top_n = st.slider("Display Top:", 5, 100, 30, 5)
+
+            vote_counts = vote_counts.head(top_n)
+            
+            df_plot = vote_counts.reset_index()
+            df_plot.columns = ['Designation', 'Votes']
+
+            if sort_order == "Most Votes":
+                df_plot = df_plot.sort_values(by='Votes', ascending=True) # Ascending for BarH
+            else:
+                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+            fig = px.bar(
+                df_plot,
+                x="Votes",
+                y="Designation",
+                orientation="h",
+                text="Votes"
+            )
+
+            fig.update_traces(
+                marker=dict(
+                    color=df_plot["Votes"],
+                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                    line=dict(width=0)
+                ),
+                textposition="outside",
+                cliponaxis=False
+            )
+            
+            dynamic_height = max(300, len(df_plot) * 35)
+            fig.update_layout(
+                height=dynamic_height,
+                bargap=0.35,
+                xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+                yaxis=dict(title=""),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=20, b=0),
+                font=dict(color="#0F172A")
+            )
+
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No votes logged yet.")
+
     except:
         pass
-
-    # 3. RENDER (Using LATCHED data + Local)
-    total_votes_list = st.session_state.latched_server_votes + st.session_state.recent_submissions
-    
-    if total_votes_list:
-        df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
-        vote_counts = df_combined['Designation'].value_counts()
-        
-        col_sort, col_slider = st.columns([1, 1])
-        with col_sort:
-            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
-        with col_slider:
-            top_n = st.slider("Display Top:", 5, 100, 30, 5)
-
-        vote_counts = vote_counts.head(top_n)
-        
-        df_plot = vote_counts.reset_index()
-        df_plot.columns = ['Designation', 'Votes']
-
-        if sort_order == "Most Votes":
-            df_plot = df_plot.sort_values(by='Votes', ascending=True)
-        else:
-            df_plot = df_plot.sort_values(by='Designation', ascending=False)
-
-        fig = px.bar(
-            df_plot,
-            x="Votes",
-            y="Designation",
-            orientation="h",
-            text="Votes"
-        )
-
-        fig.update_traces(
-            marker=dict(
-                color=df_plot["Votes"],
-                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                line=dict(width=0)
-            ),
-            textposition="outside",
-            cliponaxis=False
-        )
-        
-        dynamic_height = max(300, len(df_plot) * 35)
-        fig.update_layout(
-            height=dynamic_height,
-            bargap=0.35,
-            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
-            yaxis=dict(title=""),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=0, r=0, t=20, b=0),
-            font=dict(color="#0F172A")
-        )
-
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    else:
-        st.info("No votes logged yet.")
 
 live_dashboard()
