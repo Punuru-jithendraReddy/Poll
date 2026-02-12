@@ -123,7 +123,7 @@ col_name, col_email = st.columns(2)
 with col_name:
     user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
 with col_email:
-    user_email = st.text_input("Corporate Email", placeholder="agent@intel.com")
+    user_email = st.text_input("Corporate Email", placeholder="agent@svarsppstech.com")
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
@@ -161,7 +161,7 @@ if st.button("Submit Selections", type="primary"):
     elif not final_selections:
         st.error("Please select at least one target.")
     elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarsppstech\.com$", user_email):
-        st.error("Invalid email format.")
+        st.error("Invalid email. Only @svarsppstech.com emails are allowed.")
     else:
         # --- DUPLICATE CHECK START ---
         is_duplicate = False
