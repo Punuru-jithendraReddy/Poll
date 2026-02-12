@@ -3,6 +3,7 @@ import requests
 import re
 import pandas as pd
 import plotly.express as px
+import time
 
 # ==========================================
 # 1. SYSTEM CONFIGURATION
@@ -93,6 +94,8 @@ if "team_select" not in st.session_state:
     st.session_state.team_select = []
 if "recent_submissions" not in st.session_state:
     st.session_state.recent_submissions = [] # Stores local submissions for instant feedback
+if "submitted_emails" not in st.session_state:
+    st.session_state.submitted_emails = set() # Stores emails submitted in this session
 
 # ==========================================
 # BULK IMPORT
@@ -150,7 +153,7 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMISSION LOGIC (NO ERRORS + INSTANT UPDATE)
+# SUBMISSION LOGIC (DUPLICATE CHECK + SILENT ERRORS)
 # ==========================================
 if st.button("Submit Selections", type="primary"):
     if user_name == "Select identity..." or not user_email:
@@ -160,29 +163,59 @@ if st.button("Submit Selections", type="primary"):
     elif not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user_email):
         st.error("Invalid email format.")
     else:
-        # 1. SEND DATA (Fire and forget style)
-        payload = {
-            ENTRY_EMAIL: user_email,
-            ENTRY_NAME: user_name,
-            ENTRY_MAGIC: final_selections # Request handles lists automatically usually, or we join them
-        }
+        # --- DUPLICATE CHECK START ---
+        is_duplicate = False
+        target_email = user_email.strip().lower()
+
+        # 1. Local Check (Instant block if user just submitted)
+        if target_email in st.session_state.submitted_emails:
+            is_duplicate = True
         
-        try:
-            # We treat the submission as successful if the request doesn't throw a connection error
-            # Google often returns non-200 redirects for "Limit 1 response" forms, so we ignore status codes.
-            requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+        # 2. Server Check (Check Google Sheet)
+        # We wrap this in try/except to SILENTLY FAIL if network is bad
+        # If network fails, we skip duplicate check and assume valid to avoid error message
+        if not is_duplicate:
+            try:
+                # Add cache busting to attempt fresh read
+                check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
+                df = pd.read_csv(check_url, on_bad_lines='skip')
+                
+                # Sanitize
+                df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
+                
+                if (df_string == target_email).any().any():
+                    is_duplicate = True
+            except:
+                # SILENT FAILURE: Do nothing, just proceed
+                pass
+        
+        # --- SUBMISSION START ---
+        if is_duplicate:
+            st.error("This email has already submitted.")
+        else:
+            payload = {
+                ENTRY_EMAIL: user_email,
+                ENTRY_NAME: user_name,
+                ENTRY_MAGIC: final_selections
+            }
             
-            # 2. INSTANTLY UPDATE DASHBOARD (Optimistic UI)
-            # We save this submission to session state so the chart renders it immediately
-            # without waiting for Google Sheets CSV to update.
-            st.session_state.recent_submissions.extend(final_selections)
-            
-            st.success("Submission successful!")
-            st.session_state.team_select = [] # Clear form
-            
-        except Exception as e:
-            # Only show error if it's a genuine connection failure
-            st.error(f"Connection failed. Please check your internet.")
+            try:
+                # Fire and forget style
+                requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+                
+                # 1. Update Local Duplicate Cache
+                st.session_state.submitted_emails.add(target_email)
+
+                # 2. Update Instant Graph Cache
+                st.session_state.recent_submissions.extend(final_selections)
+                
+                st.success("Submission successful!")
+                st.session_state.team_select = [] # Clear form
+                
+            except:
+                # SILENT FAILURE: User asked to hide network errors
+                # If it actually fails, we just don't show the red box
+                pass
 
 st.divider()
 
@@ -193,7 +226,8 @@ st.markdown("### Live Leaderboard")
 
 try:
     # 1. Load Data from Server
-    df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
+    # We use a try-except block here too to prevent dashboard crashes
+    df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
     
     # 2. Process Server Data
     if not df.empty and len(df.columns) >= 4:
@@ -203,8 +237,7 @@ try:
     else:
         server_votes_list = []
 
-    # 3. MERGE Local + Server Data (This creates the "Instant" effect)
-    # We combine what we just submitted (in memory) with what's on the server
+    # 3. MERGE Local + Server Data
     total_votes_list = server_votes_list + st.session_state.recent_submissions
     
     if total_votes_list:
@@ -265,5 +298,6 @@ try:
     else:
         st.info("No votes logged yet.")
 
-except Exception as e:
+except:
+    # Silent fail for Dashboard too if needed
     st.warning("Dashboard initializing...")
