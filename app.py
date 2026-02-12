@@ -4,7 +4,6 @@ import re
 import pandas as pd
 import plotly.express as px
 import time
-from datetime import datetime, timedelta
 
 # ==========================================
 # 1. SYSTEM CONFIGURATION
@@ -16,9 +15,6 @@ ENTRY_MAGIC = "entry.921793836"
 
 # Using the CSV export link
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
-
-# ADMIN CONFIGURATION
-ADMIN_PASSWORD = "admin123"  # <--- CHANGE THIS PASSWORD
 
 # ==========================================
 # 2. MASTER DATA
@@ -87,89 +83,22 @@ USER_SUGGESTIONS = {
 }
 
 # ==========================================
-# 3. PAGE SETUP & GLOBAL STATE
+# 3. PAGE SETUP
 # ==========================================
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
-# Global Configuration Store (Shared across all users)
-@st.cache_resource
-def get_global_config():
-    # Stores the absolute timestamp when the form closes
-    return {"end_time": None, "is_active": False}
-
-global_config = get_global_config()
-
-# Session State Init
+# ==========================================
+# SESSION & CACHE INIT
+# ==========================================
 if "team_select" not in st.session_state:
     st.session_state.team_select = []
 if "recent_submissions" not in st.session_state:
-    st.session_state.recent_submissions = [] 
+    st.session_state.recent_submissions = [] # Stores local submissions for instant feedback
 if "submitted_emails" not in st.session_state:
-    st.session_state.submitted_emails = set()
+    st.session_state.submitted_emails = set() # Stores emails submitted in this session
 
 # ==========================================
-# ADMIN PANEL (SIDEBAR)
-# ==========================================
-with st.sidebar:
-    st.header("Admin Access")
-    admin_pw = st.text_input("Password", type="password")
-    
-    if admin_pw == ADMIN_PASSWORD:
-        st.success("Authorized")
-        st.markdown("---")
-        st.subheader("Timer Controls")
-        
-        # Determine current status
-        now = time.time()
-        time_remaining = 0
-        if global_config["is_active"] and global_config["end_time"]:
-            time_remaining = global_config["end_time"] - now
-        
-        # Display Status
-        if time_remaining > 0:
-            mins = int(time_remaining // 60)
-            secs = int(time_remaining % 60)
-            st.metric("Time Remaining", f"{mins}m {secs}s")
-        else:
-            st.metric("Status", "Stopped")
-
-        # Controls
-        col_start, col_stop = st.columns(2)
-        
-        with col_start:
-            # START NEW TIMER
-            new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
-            if st.button("Start Timer"):
-                global_config["end_time"] = time.time() + (new_duration * 60)
-                global_config["is_active"] = True
-                st.rerun()
-
-        with col_stop:
-            # STOP IMMEDIATELY
-            st.write("") # Spacer
-            st.write("") # Spacer
-            if st.button("Stop/Reset"):
-                global_config["is_active"] = False
-                global_config["end_time"] = None
-                st.rerun()
-                
-        st.markdown("---")
-        # EXTEND TIMER
-        extend_min = st.number_input("Extend by (mins)", min_value=1, value=5, step=1)
-        if st.button("Extend Time"):
-            if global_config["is_active"] and global_config["end_time"]:
-                # If time expired, restart from now, else add to existing
-                if time_remaining <= 0:
-                     global_config["end_time"] = time.time() + (extend_min * 60)
-                else:
-                    global_config["end_time"] += (extend_min * 60)
-                st.success(f"Extended by {extend_min} mins")
-                st.rerun()
-            else:
-                st.error("Start timer first.")
-
-# ==========================================
-# BULK IMPORT LOGIC
+# BULK IMPORT
 # ==========================================
 def process_bulk_import(pasted_data, allowed_teams):
     clean_allowed = {t.strip().lower(): t for t in allowed_teams}
@@ -190,24 +119,6 @@ def process_bulk_import(pasted_data, allowed_teams):
 st.title("Identity Intel")
 st.caption("Choose your team name wisely")
 
-# TIMER VISUALIZATION FOR USER
-current_time = time.time()
-is_submission_open = False
-seconds_left = 0
-
-if global_config["is_active"] and global_config["end_time"]:
-    seconds_left = global_config["end_time"] - current_time
-    if seconds_left > 0:
-        is_submission_open = True
-        # Calculate pretty time
-        m, s = divmod(int(seconds_left), 60)
-        st.info(f"⏳ **Submission Window Closing In:** {m} min {s} sec")
-    else:
-        st.error("⛔ **Submission Window Closed.**")
-else:
-    st.warning("⏸️ **Submissions are currently paused by Admin.**")
-
-# --- FORM ---
 col_name, col_email = st.columns(2)
 with col_name:
     user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
@@ -242,59 +153,69 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMISSION LOGIC (CONDITIONAL)
+# SUBMISSION LOGIC (DUPLICATE CHECK + SILENT ERRORS)
 # ==========================================
-# Only show Submit button if timer is valid
-if is_submission_open:
-    if st.button("Submit Selections", type="primary"):
-        if user_name == "Select identity..." or not user_email:
-            st.error("Please provide Name and Email.")
-        elif not final_selections:
-            st.error("Please select at least one target.")
-        elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarsppstech\.com$", user_email):
-            st.error("Invalid email. Only @svarsppstech.com emails are allowed.")
-        else:
-            # --- DUPLICATE CHECK START ---
-            is_duplicate = False
-            target_email = user_email.strip().lower()
+if st.button("Submit Selections", type="primary"):
+    if user_name == "Select identity..." or not user_email:
+        st.error("Please provide Name and Email.")
+    elif not final_selections:
+        st.error("Please select at least one target.")
+    elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarsppstech\.com$", user_email):
+        st.error("Invalid email. Only @svarsppstech.com emails are allowed.")
+    else:
+        # --- DUPLICATE CHECK START ---
+        is_duplicate = False
+        target_email = user_email.strip().lower()
 
-            # 1. Local Check (Instant block if user just submitted)
-            if target_email in st.session_state.submitted_emails:
-                is_duplicate = True
-            
-            # 2. Server Check (Check Google Sheet)
-            if not is_duplicate:
-                try:
-                    check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
-                    df = pd.read_csv(check_url, on_bad_lines='skip')
-                    df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-                    if (df_string == target_email).any().any():
-                        is_duplicate = True
-                except:
-                    pass
-            
-            # --- SUBMISSION START ---
-            if is_duplicate:
-                st.error("This email has already submitted.")
-            else:
-                payload = {
-                    ENTRY_EMAIL: user_email,
-                    ENTRY_NAME: user_name,
-                    ENTRY_MAGIC: final_selections
-                }
+        # 1. Local Check (Instant block if user just submitted)
+        if target_email in st.session_state.submitted_emails:
+            is_duplicate = True
+        
+        # 2. Server Check (Check Google Sheet)
+        # We wrap this in try/except to SILENTLY FAIL if network is bad
+        # If network fails, we skip duplicate check and assume valid to avoid error message
+        if not is_duplicate:
+            try:
+                # Add cache busting to attempt fresh read
+                check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
+                df = pd.read_csv(check_url, on_bad_lines='skip')
                 
-                try:
-                    requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
-                    st.session_state.submitted_emails.add(target_email)
-                    st.session_state.recent_submissions.extend(final_selections)
-                    st.success("Submission successful!")
-                    st.session_state.team_select = [] # Clear form
-                    st.rerun() # Refresh to show success and update graph
-                except:
-                    pass
-else:
-    # Button disabled state
-    st.button("Submit Selections", disabled=True, help="Timer has expired or not started.")
+                # Sanitize
+                df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
+                
+                if (df_string == target_email).any().any():
+                    is_duplicate = True
+            except:
+                # SILENT FAILURE: Do nothing, just proceed
+                pass
+        
+        # --- SUBMISSION START ---
+        if is_duplicate:
+            st.error("This email has already submitted.")
+        else:
+            payload = {
+                ENTRY_EMAIL: user_email,
+                ENTRY_NAME: user_name,
+                ENTRY_MAGIC: final_selections
+            }
+            
+            try:
+                # Fire and forget style
+                requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+                
+                # 1. Update Local Duplicate Cache
+                st.session_state.submitted_emails.add(target_email)
+
+                # 2. Update Instant Graph Cache
+                st.session_state.recent_submissions.extend(final_selections)
+                
+                st.success("Submission successful!")
+                st.session_state.team_select = [] # Clear form
+                
+            except:
+                # SILENT FAILURE: User asked to hide network errors
+                # If it actually fails, we just don't show the red box
+                pass
 
 st.divider()
 
@@ -304,8 +225,11 @@ st.divider()
 st.markdown("### Live Leaderboard")
 
 try:
+    # 1. Load Data from Server
+    # We use a try-except block here too to prevent dashboard crashes
     df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
     
+    # 2. Process Server Data
     if not df.empty and len(df.columns) >= 4:
         magic_column = df.columns[3]
         all_votes_series = df[magic_column].dropna().astype(str)
@@ -313,20 +237,25 @@ try:
     else:
         server_votes_list = []
 
+    # 3. MERGE Local + Server Data
     total_votes_list = server_votes_list + st.session_state.recent_submissions
     
     if total_votes_list:
+        # Create DataFrame from combined list
         df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
         vote_counts = df_combined['Designation'].value_counts()
         
+        # Controls
         col_sort, col_slider = st.columns([1, 1])
         with col_sort:
             sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
         with col_slider:
             top_n = st.slider("Display Top:", 5, 100, 30, 5)
 
+        # Truncate
         vote_counts = vote_counts.head(top_n)
         
+        # Plotting
         df_plot = vote_counts.reset_index()
         df_plot.columns = ['Designation', 'Votes']
 
@@ -370,4 +299,5 @@ try:
         st.info("No votes logged yet.")
 
 except:
+    # Silent fail for Dashboard too if needed
     st.warning("Dashboard initializing...")
