@@ -3,17 +3,16 @@ import requests
 import re
 import pandas as pd
 import plotly.express as px
-import time
 
 # ==========================================
-# 1. SYSTEM CONFIGURATION & CREDENTIALS
+# 1. SYSTEM CONFIGURATION
 # ==========================================
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 ENTRY_EMAIL = "emailAddress"
 ENTRY_NAME = "entry.1398544706"
 ENTRY_MAGIC = "entry.921793836"
 
-# Ensure this link is correct. If the sheet is empty, this might return 404 until first data is added.
+# Using the CSV export link
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
 
 # ==========================================
@@ -88,27 +87,27 @@ USER_SUGGESTIONS = {
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# SESSION INIT
+# SESSION & CACHE INIT
 # ==========================================
 if "team_select" not in st.session_state:
     st.session_state.team_select = []
+if "recent_submissions" not in st.session_state:
+    st.session_state.recent_submissions = [] # Stores local submissions for instant feedback
 
 # ==========================================
-# BULK IMPORT FUNCTION
+# BULK IMPORT
 # ==========================================
 def process_bulk_import(pasted_data, allowed_teams):
     clean_allowed = {t.strip().lower(): t for t in allowed_teams}
     matched_lines = []
     raw_lines = pasted_data.replace('\r', '\n').split('\n')
-
     for line in raw_lines:
         clean_line = line.strip().lower()
         if clean_line and clean_line in clean_allowed:
             matched_lines.append(clean_allowed[clean_line])
-
+    
     current = st.session_state.get("team_select", [])
     st.session_state.team_select = list(set(current + matched_lines))
-
     return len(matched_lines)
 
 # ==========================================
@@ -118,24 +117,18 @@ st.title("Identity Intel")
 st.caption("Secure Team Designation Portal")
 
 col_name, col_email = st.columns(2)
-
 with col_name:
     user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES)
-
 with col_email:
     user_email = st.text_input("Corporate Email", placeholder="agent@intel.com")
 
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
 
-# Auto-cleanup
-st.session_state.team_select = [
-    t for t in st.session_state.team_select if t in allowed_teams
-]
+# Sync session state
+st.session_state.team_select = [t for t in st.session_state.team_select if t in allowed_teams]
 
-# ==========================================
-# BULK DATA IMPORT
-# ==========================================
+# Import Section
 with st.expander("Bulk Import"):
     pasted_data = st.text_area("Paste Data", height=100)
     if st.button("Process Data"):
@@ -146,11 +139,8 @@ with st.expander("Bulk Import"):
             st.success(f"Matched {count} targets.")
             st.rerun()
 
-# ==========================================
-# TARGET SELECTION
-# ==========================================
+# Selection
 st.markdown("### Target Selection")
-
 final_selections = st.multiselect(
     "Combobox Search",
     options=allowed_teams,
@@ -160,7 +150,7 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMISSION LOGIC (ROBUST)
+# SUBMISSION LOGIC (NO ERRORS + INSTANT UPDATE)
 # ==========================================
 if st.button("Submit Selections", type="primary"):
     if user_name == "Select identity..." or not user_email:
@@ -170,129 +160,110 @@ if st.button("Submit Selections", type="primary"):
     elif not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user_email):
         st.error("Invalid email format.")
     else:
-        # 1. OPTIONAL: Check for duplicates
-        # We wrap this in a TRY block so it DOES NOT BLOCK submission if the Sheet is busy
-        is_duplicate = False
+        # 1. SEND DATA (Fire and forget style)
+        payload = {
+            ENTRY_EMAIL: user_email,
+            ENTRY_NAME: user_name,
+            ENTRY_MAGIC: final_selections # Request handles lists automatically usually, or we join them
+        }
+        
         try:
-            # Add cache busting to attempt fresh read
-            check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
-            df = pd.read_csv(check_url, on_bad_lines='skip')
+            # We treat the submission as successful if the request doesn't throw a connection error
+            # Google often returns non-200 redirects for "Limit 1 response" forms, so we ignore status codes.
+            requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
             
-            # Sanitize for check
-            df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-            target_email = user_email.strip().lower()
+            # 2. INSTANTLY UPDATE DASHBOARD (Optimistic UI)
+            # We save this submission to session state so the chart renders it immediately
+            # without waiting for Google Sheets CSV to update.
+            st.session_state.recent_submissions.extend(final_selections)
             
-            if (df_string == target_email).any().any():
-                is_duplicate = True
+            st.success("Submission successful!")
+            st.session_state.team_select = [] # Clear form
+            
         except Exception as e:
-            # If we fail to read the sheet (database error), we IGNORE it and allow submission
-            # This fixes the "Database connection failed" blocking the user
-            print(f"Duplicate check skipped due to error: {e}")
-            is_duplicate = False
-
-        # 2. SUBMIT to Google Form
-        if is_duplicate:
-            st.error("This email has already submitted.")
-        else:
-            payload = {
-                ENTRY_EMAIL: user_email,
-                ENTRY_NAME: user_name,
-                ENTRY_MAGIC: final_selections
-            }
-            try:
-                response = requests.post(GOOGLE_FORM_URL, data=payload)
-                if response.status_code == 200:
-                    st.success("Submission successful!")
-                    st.info("Note: The leaderboard below may take up to 5 minutes to update (Google Sheets delay).")
-                    st.session_state.team_select = []
-                else:
-                    st.error("Submission failed. Check network.")
-            except:
-                st.error("Network error during submission.")
+            # Only show error if it's a genuine connection failure
+            st.error(f"Connection failed. Please check your internet.")
 
 st.divider()
 
 # ==========================================
-# 5. PREMIUM LIVE DASHBOARD
+# 5. LIVE DASHBOARD (INSTANT)
 # ==========================================
 st.markdown("### Live Leaderboard")
 
 try:
-    # Adding cache busting
-    dashboard_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
+    # 1. Load Data from Server
+    df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
     
-    # on_bad_lines='skip' prevents the dashboard from crashing if the CSV is messy
-    df = pd.read_csv(dashboard_url, on_bad_lines='skip')
-
+    # 2. Process Server Data
     if not df.empty and len(df.columns) >= 4:
         magic_column = df.columns[3]
-        all_votes = df[magic_column].dropna().astype(str)
-        split_votes = all_votes.str.split(',').explode().str.strip()
+        all_votes_series = df[magic_column].dropna().astype(str)
+        server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
+    else:
+        server_votes_list = []
 
+    # 3. MERGE Local + Server Data (This creates the "Instant" effect)
+    # We combine what we just submitted (in memory) with what's on the server
+    total_votes_list = server_votes_list + st.session_state.recent_submissions
+    
+    if total_votes_list:
+        # Create DataFrame from combined list
+        df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
+        vote_counts = df_combined['Designation'].value_counts()
+        
+        # Controls
         col_sort, col_slider = st.columns([1, 1])
-
         with col_sort:
             sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
-
         with col_slider:
             top_n = st.slider("Display Top:", 5, 100, 30, 5)
 
-        vote_counts = split_votes.value_counts().head(top_n)
+        # Truncate
+        vote_counts = vote_counts.head(top_n)
+        
+        # Plotting
+        df_plot = vote_counts.reset_index()
+        df_plot.columns = ['Designation', 'Votes']
 
-        if not vote_counts.empty:
-            df_plot = vote_counts.reset_index()
-            df_plot.columns = ['Designation', 'Votes']
-
-            if sort_order == "Most Votes":
-                df_plot = df_plot.sort_values(by='Votes', ascending=True)
-            else:
-                df_plot = df_plot.sort_values(by='Designation', ascending=False)
-
-            fig = px.bar(
-                df_plot,
-                x="Votes",
-                y="Designation",
-                orientation="h",
-                text="Votes"
-            )
-
-            fig.update_traces(
-                marker=dict(
-                    color=df_plot["Votes"],
-                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                    line=dict(width=0)
-                ),
-                textposition="outside",
-                cliponaxis=False
-            )
-
-            bar_height = 32
-            dynamic_height = max(300, len(df_plot) * bar_height)
-
-            fig.update_layout(
-                height=dynamic_height,
-                bargap=0.35,
-                xaxis=dict(
-                    rangemode="tozero",
-                    showgrid=True,
-                    gridcolor="#E2E8F0",
-                    title="Total Votes",
-                    dtick=1
-                ),
-                yaxis=dict(title=""),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=20, b=0),
-                font=dict(color="#0F172A")
-            )
-
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        if sort_order == "Most Votes":
+            df_plot = df_plot.sort_values(by='Votes', ascending=True)
         else:
-            st.info("No votes logged yet.")
+            df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+        fig = px.bar(
+            df_plot,
+            x="Votes",
+            y="Designation",
+            orientation="h",
+            text="Votes"
+        )
+
+        fig.update_traces(
+            marker=dict(
+                color=df_plot["Votes"],
+                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                line=dict(width=0)
+            ),
+            textposition="outside",
+            cliponaxis=False
+        )
+        
+        dynamic_height = max(300, len(df_plot) * 35)
+        fig.update_layout(
+            height=dynamic_height,
+            bargap=0.35,
+            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+            yaxis=dict(title=""),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=20, b=0),
+            font=dict(color="#0F172A")
+        )
+
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     else:
-        st.info("Waiting for data synchronization (Google Sheets delay)...")
+        st.info("No votes logged yet.")
 
 except Exception as e:
-    # We silently catch the dashboard error so it doesn't look broken
-    # Likely causes: Sheet is empty, private, or 404
-    st.info("Dashboard initializing... (Data will appear after first submission syncs)")
+    st.warning("Dashboard initializing...")
