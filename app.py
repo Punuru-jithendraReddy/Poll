@@ -6,51 +6,26 @@ import plotly.express as px
 import time
 
 # ==========================================
-# 1. PAGE SETUP
+# 1. SYSTEM CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="wide")
+GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
+ENTRY_EMAIL = "emailAddress"
+ENTRY_NAME = "entry.1398544706"
+ENTRY_MAGIC = "entry.921793836"
+GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
+
+ADMIN_PASSWORD = "admin123" 
 
 # ==========================================
-# 2. GLOBAL STATE & CONFIG
-# ==========================================
-@st.cache_resource
-def get_global_config():
-    return {"end_time": None, "is_active": False}
-
-global_config = get_global_config()
-
-# Initialize Session State
-if "team_select" not in st.session_state: st.session_state.team_select = []
-if "recent_submissions" not in st.session_state: st.session_state.recent_submissions = [] 
-if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
-if "success_flag" not in st.session_state: st.session_state.success_flag = False
-if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
-
-# ==========================================
-# 3. MASTER DATA
+# 2. MASTER DATA
 # ==========================================
 USER_NAMES = [
-    "Saumya L", "Tharuni", "Shreya singh", "Bhavana Lanka", "Monisha K", 
-    "Jithendra Reddy", "Shaik Afroz", "Sravanthi C H", "Shrineeth Reddy B", 
-    "Saikiran Kandhi", "Velugubantla Vijay Sai", "Venkateswara Rao"
+    "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
+    "Bhavana Lanka", "Sravanthi Chapram", "B. Shrineeth Reddy",
+    "Shreya Singh", "Tharuni Vallepi", "Saumya Lailamony",
+    "Monisha", "Vijay Sai"
 ]
 
-USER_EMAILS = {
-    "Saumya L": "Saumya.Lailamony@svarappstech.com",
-    "Tharuni": "Tharuni.Vallepi@svarappstech.com",
-    "Shreya singh": "Shreya.Singh@svarappstech.com",
-    "Bhavana Lanka": "Bhavana.lanka@svarappstech.com",
-    "Monisha K": "Monisha.krishnamurthy@svarappstech.com",
-    "Jithendra Reddy": "Jithendra.R@svarappstech.com",
-    "Shaik Afroz": "Afroz.S@svarappstech.com",
-    "Sravanthi C H": "Sravanthi.Chapram@svarappstech.com",
-    "Shrineeth Reddy B": "Shrineeth.R@svarappstech.com",
-    "Saikiran Kandhi": "Saikiran.K@svarappstech.com",
-    "Velugubantla Vijay Sai": "Vijay.Velugubantla@svarappstech.com",
-    "Venkateswara Rao": "Venkat.Goriparthi@svarappstech.com"
-}
-
-# Standard Team List
 TEAM_NAMES = [
     "Reactor Core", "Apex Sync", "Pixel Forge", "Zero Gravity", "Ignition Squad", "Adrenaline Cartel", 
     "Logic Pulse", "Node Builders", "Venom Lab", "Kinetic Forge", "Quantum Delivery", "Adrenaline Catalyst", 
@@ -92,214 +67,260 @@ TEAM_NAMES = [
     "H Y P E R _ S O L E.", "C Y P H E R _ S I N."
 ]
 
+USER_SUGGESTIONS = {
+    "Saikiran Kandhi": ["Reactor Core","Apex Sync","Pixel Forge","Zero Gravity","Ignition Squad","Adrenaline Cartel","Logic Pulse","Node Builders","Venom Lab","Kinetic Forge","Quantum Delivery","Adrenaline Catalyst"],
+    "Shaik Afroz": ["Innovators’ Guild","FutureMakers","IdeaCatalysts","SparkLab","InsightSphere","KnowledgeCrafters","DiscoveryHub","ResearchNest","ThinkTankers","FusionWorks","CollabInnovate","NextGen Minds","Catalyst Crew","Labyrinth of Ideas","Prototype Pioneers","The Experimenters’ Guild","IdeaStormers","Odyssey R&D","Aurora Minds."],
+    "Venkat": ["InnoForge","ThinkLab","IdeaMint","BrainMatter","NextCore","CodePulse","SparkHub","LogicNest","ProtoPoint","FusionX","NexGen Lab","Innovex","R&D Squad","IdeaCell","CoreShift","PrimeMind","TechBloom","DeepThink","MindSprint","QuantumWorks","VisionCraft","NovaMinds","BlueLabs","AlphaThink","IdeaGrid."],
+    "Jithendra reddy": ["TecNovid","Tadino","C-fit","Futi","SizFin","Noviq","Lumira","Sartiq","Ventari","Aethos","Xelera","Zenvia","Lussio","Omniq","Valoria","Kinetiq","Fiora","Syntheo","Aurore","Eleviq"],
+    "Bhavana Lanka": ["InnoSprint","IdeaSprint","BuildStorm","ProtoMinds","SparkShift","FutureCraft","BrightEdge","MindForge","InnoWave","ThinkStack","The Idea Arch","LogicWorks","The Solutionists","ThinkCatalyst","FutureGrid","MoonShot Makers","MindSpark","EdgeWorks","Cognitive Sparks","The Foundry","Iterate & Elevate"],
+    "Sravanthi Chapram": ["Pro Tech","Core Collective","Smart Works","Idea Foundry","Smart Squad","Innovation Circle","Impact Team","Team Rise","New Path","Vision Works","Innovators","Growth Hub","Progress Team","Creative Pulse","Change Makers","Innovation Unit","Smart Group","Tech Circle","Pro Thinkers","Team Forward"],
+    "B. Shrineeth Reddy": ["Mindful Opus","Unified Ergon","A2Z_WEDO","1 4!ALL","Northfold","Nexus ops","Prime Synapse","In-various","Aegorin","Nexforge","Sfaira Infinite","No Finis","Corepath","Primevector","Axislimes","Clearframe","Varipoint","Infyline","181 Soros"],
+    "Shreya Singh": ["NeuraX","AetherAI","QuantumEdge","NovaMind","CyberFlux","SparkMind AI","TechNova","Digital Nexus","Hyperion Labs","Future Systems Group","IntelliTech","InfiAI","MindMesh","Brainwave","DeepLogic","ThinkAI","IncuMind","Synapse Studio","CoreTech Innovation","TechOrbit"],
+    "Tharuni Vallepi": ["PowerAI Nexus","Cognitive CloudWorks","FlowMind Innovators","PowerSynapse Squad","Fusion","Intelligence Team","AI-Driven Makers","CloudFlow Architects","NeuraPower Collective","IntelliPlatform Crew","AutoCloud Pioneers","Power AI Digital Team","Enterprise Intelligent Automation Council","Enterprise Power Automation and AI Office (EPAI)","Global Power Automation and AI Board (GPAI)","IntelliOps Crew","IntelliPlatform Guild","PowerSphere AI","AIFabricators","NeuroPower Makers","PowerBots Consortium","AppForge Intelligence","Digital Dynamos","Visioneers","The Byte Brigade","Power AI Pros","Core Connect","SyncUP Team"],
+    "Saumya Lailamony": ["NextWave","InnovX","FutureForge","Technova","Dynamiq","Infinitum","Incubis","Ignitia","Pulseon","Techspire","PioneerX","Creatiq","Imaginex","Concepta","Datavex","Logicore","Infinitiq","Visionix","Coreon","Techvanta"],
+    "Monisha": ["InnoVortex","NovaForge","Thinkubator","IgniteX","IdeaFoundry","VisionCraft","QuantumHive","NeoGenesis","InnoCore","MindForge","FutureNest","NovaThink","AetherWorks","Nexora","Evolvex","OriginPoint","Infinitum Forge","HelixWorks","FutureWeave","Cognitiva","Zentrix","Neovex","Quantro","Virex","Axion","Orbix","Fluxa","Kinetiq","Xelion","Ultrix"],
+    "Vijay Sai": ["NULL_STATE","8HZ","D E A D _ B I T","ISO_CHROME","PRISM_RIOT","Ambiance 1.0","Object / 001","Protocol 28","Signal & Salt","Cold Start","NOISE FLOOR","RAW INPUT","OFF GRID","T-MINUS","PAPER THIN","28°_STUDIO.","Hello Team.","The Glitch.","ROOM_204.","H Y P E R _ S O L E.","C Y P H E R _ S I N."]
+}
+
 # ==========================================
-# 4. ADMIN & CONFIG
+# 3. GLOBAL STATE & CONFIG
+# ==========================================
+st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
+
+@st.cache_resource
+def get_global_config():
+    # Store state in a mutable dictionary so all users share it
+    return {"end_time": None, "is_active": False}
+
+global_config = get_global_config()
+
+# Local session state
+if "team_select" not in st.session_state:
+    st.session_state.team_select = []
+if "recent_submissions" not in st.session_state:
+    st.session_state.recent_submissions = [] 
+if "submitted_emails" not in st.session_state:
+    st.session_state.submitted_emails = set()
+if "success_flag" not in st.session_state:
+    st.session_state.success_flag = False
+# We track the last known state to detect changes
+if "last_known_is_open" not in st.session_state:
+    st.session_state.last_known_is_open = False
+
+# ==========================================
+# 4. ADMIN PANEL (SIDEBAR)
 # ==========================================
 with st.sidebar:
     st.header("Admin Access")
     admin_pw = st.text_input("Password", type="password")
-    is_admin = (admin_pw == "admin123")
     
-    if is_admin:
-        st.success("Access Granted")
-        st.divider()
-        st.subheader("⚙️ Form Settings")
+    if admin_pw == ADMIN_PASSWORD:
+        st.success("Authorized")
+        st.markdown("---")
+        st.subheader("Timer Controls")
         
-        # DEFAULT IDs - CHANGED TO THE ONES FROM YOUR LINK
-        conf_form_url = st.text_input("Form URL", value="https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse")
-        conf_sheet_url = st.text_input("Sheet CSV URL", value="https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv")
-        
-        st.markdown("**Entry IDs (From your pre-filled link)**")
-        conf_entry_name = st.text_input("Name ID", value="entry.1398544706")
-        conf_entry_magic = st.text_input("Team ID", value="entry.921793836")
-        
-        st.divider()
-        st.subheader("⏱️ Timer Controls")
+        # Admin controls update the global shared object directly
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("Start Timer"):
+        
+        col_start, col_stop = st.columns(2)
+        with col_start:
+            if st.button("Start / Reset"):
                 global_config["end_time"] = time.time() + (new_duration * 60)
                 global_config["is_active"] = True
                 st.rerun()
-        with c2:
-            if st.button("Stop Timer"):
+        with col_stop:
+            if st.button("Stop"):
                 global_config["is_active"] = False
                 global_config["end_time"] = None
                 st.rerun()
-    else:
-        # HARDCODED DEFAULTS (So it works without Admin login)
-        conf_form_url = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
-        conf_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
-        conf_entry_name = "entry.1398544706"
-        conf_entry_magic = "entry.921793836"
+                
+        st.markdown("---")
+        extend_min = st.number_input("Extend by (mins)", min_value=1, value=5, step=1)
+        if st.button("Extend Time"):
+            if global_config["is_active"] and global_config["end_time"]:
+                global_config["end_time"] += (extend_min * 60)
+                st.success("Extended!")
+                st.rerun()
+            else:
+                st.error("Timer not running.")
 
 # ==========================================
-# 5. TIMER WATCHDOG
+# 5. WATCHDOG + TIMER (THE SYNC FIX)
 # ==========================================
 st.title("Identity Intel")
-st.caption("Operative Selection Dashboard")
+st.caption("Choose your team name wisely, as it reflects your vision, strength, and ambition")
 
+# This fragment runs EVERY 1 SECOND.
+# It acts as a "Watchdog": If the Global State (Admin stopped) 
+# differs from what the User sees, it FORCES the whole page to reload.
 @st.fragment(run_every=1)
-def timer_panel():
-    if global_config["is_active"] and global_config["end_time"]:
-        remaining = global_config["end_time"] - time.time()
-        is_open = remaining > 0
+def live_status_panel():
+    # 1. Calculate current real-time status
+    current_is_active = global_config["is_active"]
+    current_end_time = global_config["end_time"]
+    time_left = (current_end_time - time.time()) if current_end_time else 0
+    
+    # Is the form technically "Open" right now?
+    real_time_is_open = current_is_active and (time_left > 0)
+    
+    # 2. WATCHDOG CHECK: 
+    # If the real status differs from what the page last rendered, FORCE RERUN.
+    if real_time_is_open != st.session_state.last_known_is_open:
+        # Update local state so we don't loop forever
+        st.session_state.last_known_is_open = real_time_is_open
+        st.rerun()
+
+    # 3. Display Timer (Only if active)
+    if real_time_is_open:
+        mins, secs = divmod(int(time_left), 60)
+        timer_text = f"{mins:02d}:{secs:02d}"
         
-        if is_open:
-            mins, secs = divmod(int(remaining), 60)
-            st.markdown(f"""
-            <div style="background:#e3f2fd;padding:15px;border-radius:10px;text-align:center;border:1px solid #90caf9;">
-                <h3 style="margin:0;color:#1565c0;">⏳ {mins:02d}:{secs:02d}</h3>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.error("⛔ MISSION WINDOW CLOSED")
-            if st.session_state.last_known_is_open: # Only rerun on state change
-                st.session_state.last_known_is_open = False
-                st.rerun()
-                
-        # Sync state
-        if is_open != st.session_state.last_known_is_open:
-            st.session_state.last_known_is_open = is_open
-            st.rerun()
+        st.markdown(f"""
+        <div style="
+            background-color: #e6fffa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border-left: 5px solid #00bfa5; 
+            text-align: center; 
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        ">
+            <div style="font-size: 14px; color: #444; font-weight: bold; letter-spacing: 1px;">TIME REMAINING</div>
+            <div style="font-size: 32px; font-weight: 800; color: #00796b; font-family: monospace;">{timer_text}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    else:
+        st.error("⛔ **TIME UP! Submissions Closed.**")
 
-timer_panel()
+# Run the watchdog/timer
+live_status_panel()
 
 # ==========================================
-# 6. MAIN APPLICATION
+# 6. MAIN APP LOGIC (Controlled by Watchdog)
 # ==========================================
+
+# We rely on the session state flag that the Watchdog keeps updated
 is_open = st.session_state.last_known_is_open
 
+# Check if a successful submission just happened
 if st.session_state.success_flag:
-    st.toast("✅ Mission Data Uploaded Successfully!", icon="🚀")
+    st.toast("✅ Submitted successfully!", icon="🎉")
     st.session_state.success_flag = False
 
-# Inputs
-c_name, c_email = st.columns(2)
-with c_name:
-    user_name = st.selectbox("Operative Identity", ["Select identity..."] + USER_NAMES, disabled=not is_open)
-with c_email:
-    # Auto-fill email but DO NOT SEND IT TO GOOGLE to avoid 400 Error
-    current_email = USER_EMAILS.get(user_name, "")
-    user_email = st.text_input("Encrypted Channel (Email)", value=current_email, disabled=True)
+# --- INPUT FORM ---
+col_name, col_email = st.columns(2)
+with col_name:
+    user_name = st.selectbox("Operative Name", options=["Select identity..."] + USER_NAMES, disabled=not is_open)
+with col_email:
+    user_email = st.text_input("Corporate Email", placeholder="agent@svarappstech.com", disabled=not is_open)
 
-# Team Selection
-st.markdown("### Target Acquisition")
-final_selections = st.multiselect(
-    "Select Targets", options=TEAM_NAMES, key="team_select", 
-    label_visibility="collapsed", placeholder="Select targets...", disabled=not is_open
-)
+forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
+allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
+st.session_state.team_select = [t for t in st.session_state.team_select if t in allowed_teams]
 
-# Bulk Import
-with st.expander("Bulk Data Upload"):
-    pasted_data = st.text_area("Paste List", height=100, disabled=not is_open)
-    if st.button("Process Bulk Data", disabled=not is_open):
-        clean_allowed = {t.strip().lower(): t for t in TEAM_NAMES}
+# Import
+with st.expander("Bulk Import"):
+    pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
+    if st.button("Process Data", disabled=not is_open):
+        clean_allowed = {t.strip().lower(): t for t in allowed_teams}
         matched = []
         if pasted_data:
             for line in pasted_data.replace('\r', '\n').split('\n'):
                 cl = line.strip().lower()
                 if cl in clean_allowed: matched.append(clean_allowed[cl])
             st.session_state.team_select = list(set(st.session_state.team_select + matched))
+            st.success(f"Matched {len(matched)}.")
             st.rerun()
 
-# --- CLASSIC SUBMISSION LOGIC (The Fix) ---
-def submit_classic(url, name_id, name_val, team_id, team_list):
-    headers = {"User-Agent": "Mozilla/5.0"}
-    
-    # 1. Base Payload (Name)
-    payload = {name_id: name_val}
-    
-    # 2. Add Teams (The Request library handles lists correctly for checkboxes)
-    # This sends entry.123=TeamA&entry.123=TeamB
-    payload[team_id] = team_list
-    
-    # 3. NO EMAIL in payload (Fixes 400 error if form doesn't collect emails)
-    
-    try:
-        response = requests.post(url, data=payload, headers=headers, timeout=10)
-        response.raise_for_status()
-        return True, "Success"
-    except requests.exceptions.HTTPError as e:
-        return False, f"Google Rejected (400). Error: {e}"
-    except Exception as e:
-        return False, f"Connection Error: {e}"
+# Multiselect
+st.markdown("### Target Selection")
+final_selections = st.multiselect(
+    "Combobox", options=allowed_teams, key="team_select", label_visibility="collapsed",
+    placeholder="Select teams...", disabled=not is_open
+)
 
+# --- SUBMIT BUTTON ---
 st.write("")
+# This button is now fully controlled by 'is_open', which is synced by the Watchdog
 if is_open:
-    if st.button("EXECUTE MISSION (SUBMIT)", type="primary", use_container_width=True):
-        if user_name == "Select identity...":
-            st.error("Identity Verification Failed: Select Name.")
-        elif not final_selections:
-            st.error("No Targets Selected.")
-        else:
-            success, msg = submit_classic(
-                conf_form_url,
-                conf_entry_name, user_name,
-                conf_entry_magic, final_selections
-            )
+    if st.button("Submit Selections", type="primary", use_container_width=True):
+        
+        # Double check time on server side at moment of click (Safety Net)
+        if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
+            st.error("⚠️ Submission window closed just now.")
+            time.sleep(2)
+            st.rerun()
             
-            if success:
-                st.session_state.submitted_emails.add(user_email)
-                st.session_state.recent_submissions.extend(final_selections)
-                st.session_state.team_select = []
-                st.session_state.success_flag = True
-                st.rerun()
+        elif user_name == "Select identity..." or not user_email:
+            st.error("Name and Email required.")
+        elif not final_selections:
+            st.error("Select at least one target.")
+        else:
+            t_mail = user_email.strip().lower()
+            if not re.match(r"^[a-z0-9_.+-]+@svarappstech\.com$", t_mail):
+                 st.error("Invalid email. Only @svarappstech.com emails are allowed.")
             else:
-                st.error(f"❌ Transmission Failed: {msg}")
+                is_dup = False
+                if t_mail in st.session_state.submitted_emails: is_dup = True
+                
+                if not is_dup:
+                    try:
+                        df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
+                        if (df.astype(str).apply(lambda x: x.str.strip().str.lower()) == t_mail).any().any():
+                            is_dup = True
+                    except: pass 
+                
+                if is_dup:
+                    st.error("Already submitted.")
+                else:
+                    try:
+                        payload = {ENTRY_EMAIL: user_email, ENTRY_NAME: user_name, ENTRY_MAGIC: final_selections}
+                        requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+                        
+                        st.session_state.submitted_emails.add(t_mail)
+                        st.session_state.recent_submissions.extend(final_selections)
+                        st.session_state.team_select = []
+                        st.session_state.success_flag = True 
+                        st.rerun() 
+                    except:
+                        st.error("Network Error")
 else:
-    st.button("⛔ MISSION WINDOW CLOSED", disabled=True, use_container_width=True)
+    # Disabled State (Visible when Watchdog disables the app)
+    st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
 st.divider()
 
 # ==========================================
-# 7. LIVE DASHBOARD
+# 7. DASHBOARD (Auto-refreshes with the app)
 # ==========================================
-@st.fragment(run_every=2)
-def live_dashboard():
-    st.markdown("### Live Leaderboard")
-    try:
-        # Load Data
-        df = pd.read_csv(f"{conf_sheet_url}&t={int(time.time())}", on_bad_lines='skip')
+st.markdown("### Live Leaderboard")
+try:
+    df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
+    if not df.empty and len(df.columns) >= 4:
+        s_votes = df[df.columns[3]].dropna().astype(str).str.split(',').explode().str.strip().tolist()
+    else: s_votes = []
+    
+    total = s_votes + st.session_state.recent_submissions
+    
+    if total:
+        vc = pd.DataFrame(total, columns=['D']).value_counts().reset_index()
+        vc.columns = ['Designation', 'Votes']
         
-        # Process Google Sheet Data
-        sheet_votes = []
-        if not df.empty and len(df.columns) >= 3: # Ensure enough columns
-            # Column index 2 is usually the 3rd column (Team Selection)
-            # Adjust if your sheet is different
-            col_idx = 2 if len(df.columns) > 2 else -1
-            if col_idx != -1:
-                sheet_votes = df.iloc[:, col_idx].dropna().astype(str).str.split(',').explode().str.strip().tolist()
-
-        # Merge with Local Session
-        total_votes = sheet_votes + st.session_state.recent_submissions
+        col_s, col_sl = st.columns(2)
+        with col_s: sort = st.selectbox("Sort", ["Most Votes", "A-Z"])
+        with col_sl: top = st.slider("Show", 5, 50, 20)
         
-        if total_votes:
-            # Count & Sort
-            vc = pd.DataFrame(total_votes, columns=['Team']).value_counts().reset_index()
-            vc.columns = ['Team', 'Votes']
-            
-            # Sort Descending (Highest on Top)
-            # In Plotly Horizontal Bar, the bottom of the list is the top of the chart.
-            # So we sort Ascending (Small -> Large) so Large is at the "end" (Top).
-            vc = vc.sort_values('Votes', ascending=True).tail(15)
-            
-            fig = px.bar(vc, x='Votes', y='Team', orientation='h', text='Votes')
-            fig.update_traces(marker_color='#FF4B4B', textposition='outside')
-            fig.update_layout(
-                height=max(400, len(vc)*40), 
-                yaxis={'title':''}, 
-                xaxis={'title':''},
-                plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=0, r=0, t=0, b=0)
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        if sort == "Most Votes":
+             vc = vc.sort_values('Votes', ascending=True).tail(top)
         else:
-            st.info("Awaiting Data...")
-            
-    except Exception:
-        # Silent fail for dashboard to prevent UI flickering
-        pass
-
-live_dashboard()
+             vc = vc.sort_values('Designation', ascending=False).tail(top)
+        
+        fig = px.bar(vc, x='Votes', y='Designation', orientation='h', text='Votes')
+        fig.update_traces(marker_color='#FF4B4B', textposition='outside')
+        fig.update_layout(height=max(300, len(vc)*35), yaxis={'title':''}, plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No votes yet.")
+except:
+    pass
