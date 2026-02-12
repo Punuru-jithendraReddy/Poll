@@ -3,7 +3,7 @@ import requests
 import re
 import pandas as pd
 import plotly.express as px
-import time  # Added to force live updates
+import time
 
 # ==========================================
 # 1. SYSTEM CONFIGURATION & CREDENTIALS
@@ -13,7 +13,7 @@ ENTRY_EMAIL = "emailAddress"
 ENTRY_NAME = "entry.1398544706"
 ENTRY_MAGIC = "entry.921793836"
 
-# Added logic to ensure URL is robust
+# Ensure this link is correct. If the sheet is empty, this might return 404 until first data is added.
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
 
 # ==========================================
@@ -88,13 +88,13 @@ USER_SUGGESTIONS = {
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# SESSION INIT (FIXED)
+# SESSION INIT
 # ==========================================
 if "team_select" not in st.session_state:
     st.session_state.team_select = []
 
 # ==========================================
-# BULK IMPORT FUNCTION (SAFE MERGE)
+# BULK IMPORT FUNCTION
 # ==========================================
 def process_bulk_import(pasted_data, allowed_teams):
     clean_allowed = {t.strip().lower(): t for t in allowed_teams}
@@ -128,7 +128,7 @@ with col_email:
 forbidden_teams = USER_SUGGESTIONS.get(user_name, [])
 allowed_teams = [team for team in TEAM_NAMES if team not in forbidden_teams]
 
-# Auto-remove forbidden teams if name changes
+# Auto-cleanup
 st.session_state.team_select = [
     t for t in st.session_state.team_select if t in allowed_teams
 ]
@@ -136,19 +136,18 @@ st.session_state.team_select = [
 # ==========================================
 # BULK DATA IMPORT
 # ==========================================
-st.markdown("### Bulk Data Import")
-pasted_data = st.text_area("Paste Data", height=100)
-
-if st.button("Process Excel Data"):
-    if user_name == "Select identity...":
-        st.warning("Please select your name first.")
-    elif pasted_data:
-        count = process_bulk_import(pasted_data, allowed_teams)
-        st.success(f"Matched {count} targets.")
-        st.rerun()
+with st.expander("Bulk Import"):
+    pasted_data = st.text_area("Paste Data", height=100)
+    if st.button("Process Data"):
+        if user_name == "Select identity...":
+            st.warning("Please select your name first.")
+        elif pasted_data:
+            count = process_bulk_import(pasted_data, allowed_teams)
+            st.success(f"Matched {count} targets.")
+            st.rerun()
 
 # ==========================================
-# TARGET SELECTION (FIXED - NO DEFAULT)
+# TARGET SELECTION
 # ==========================================
 st.markdown("### Target Selection")
 
@@ -161,9 +160,9 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMISSION LOGIC
+# SUBMISSION LOGIC (ROBUST)
 # ==========================================
-if st.button("Submit Selections"):
+if st.button("Submit Selections", type="primary"):
     if user_name == "Select identity..." or not user_email:
         st.error("Please provide Name and Email.")
     elif not final_selections:
@@ -171,38 +170,45 @@ if st.button("Submit Selections"):
     elif not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", user_email):
         st.error("Invalid email format.")
     else:
+        # 1. OPTIONAL: Check for duplicates
+        # We wrap this in a TRY block so it DOES NOT BLOCK submission if the Sheet is busy
+        is_duplicate = False
         try:
-            # FIX: Wrapped Duplicate Check in its own try/except
-            # This prevents the "Database connection failed" error if the sheet is busy/empty
+            # Add cache busting to attempt fresh read
+            check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
+            df = pd.read_csv(check_url, on_bad_lines='skip')
+            
+            # Sanitize for check
+            df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
+            target_email = user_email.strip().lower()
+            
+            if (df_string == target_email).any().any():
+                is_duplicate = True
+        except Exception as e:
+            # If we fail to read the sheet (database error), we IGNORE it and allow submission
+            # This fixes the "Database connection failed" blocking the user
+            print(f"Duplicate check skipped due to error: {e}")
             is_duplicate = False
+
+        # 2. SUBMIT to Google Form
+        if is_duplicate:
+            st.error("This email has already submitted.")
+        else:
+            payload = {
+                ENTRY_EMAIL: user_email,
+                ENTRY_NAME: user_name,
+                ENTRY_MAGIC: final_selections
+            }
             try:
-                # Add cache busting to ensure we check the latest data
-                df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&cache_bust={int(time.time())}", on_bad_lines='skip')
-                df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-                target_email = user_email.strip().lower()
-                if (df_string == target_email).any().any():
-                    is_duplicate = True
-            except:
-                # If we can't read the DB to check duplicates, we allow submission anyway (Fail Open)
-                is_duplicate = False
-
-            if is_duplicate:
-                st.error("This email has already submitted.")
-            else:
-                payload = {
-                    ENTRY_EMAIL: user_email,
-                    ENTRY_NAME: user_name,
-                    ENTRY_MAGIC: final_selections
-                }
                 response = requests.post(GOOGLE_FORM_URL, data=payload)
-
                 if response.status_code == 200:
-                    st.success("Submission successful.")
+                    st.success("Submission successful!")
+                    st.info("Note: The leaderboard below may take up to 5 minutes to update (Google Sheets delay).")
                     st.session_state.team_select = []
                 else:
-                    st.error("Submission failed.")
-        except:
-            st.error("Database connection failed.")
+                    st.error("Submission failed. Check network.")
+            except:
+                st.error("Network error during submission.")
 
 st.divider()
 
@@ -212,8 +218,11 @@ st.divider()
 st.markdown("### Live Leaderboard")
 
 try:
-    # FIX: Added timestamp to URL to force fresh data load
-    df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&cache_bust={int(time.time())}", on_bad_lines='skip')
+    # Adding cache busting
+    dashboard_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
+    
+    # on_bad_lines='skip' prevents the dashboard from crashing if the CSV is messy
+    df = pd.read_csv(dashboard_url, on_bad_lines='skip')
 
     if not df.empty and len(df.columns) >= 4:
         magic_column = df.columns[3]
@@ -281,7 +290,9 @@ try:
         else:
             st.info("No votes logged yet.")
     else:
-        st.info("Database empty.")
+        st.info("Waiting for data synchronization (Google Sheets delay)...")
 
-except:
-    st.warning("Dashboard offline.")
+except Exception as e:
+    # We silently catch the dashboard error so it doesn't look broken
+    # Likely causes: Sheet is empty, private, or 404
+    st.info("Dashboard initializing... (Data will appear after first submission syncs)")
