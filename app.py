@@ -1,14 +1,3 @@
-The **"400 Client Error"** confirms that Google Forms is rejecting your data format. This usually happens for three reasons:
-
-1. **Validation Rules:** The form might restrict how many items you can select (e.g., "Select at most 3") but your app allows more.
-2. **Data Type Mismatch:** The form expects a single text string (comma-separated) for the teams, but the code is sending a list of multiple answers (or vice versa).
-3. **Email Field:** If the form is set to "Do Not Collect Emails," sending the `emailAddress` parameter will cause a crash.
-
-I have updated the code with a **Smart Submission System** that tries the standard method first, and if that fails (Error 400), it automatically retries by formatting the data differently (joining the teams into a single text string). I also added a **Live Dashboard Fragment** so the graph updates automatically every 3 seconds without refreshing the whole page.
-
-### **Complete Fixed Code**
-
-```python
 import streamlit as st
 import requests
 import re
@@ -346,5 +335,3 @@ def live_dashboard():
         st.warning("Dashboard syncing...")
 
 live_dashboard()
-
-```
