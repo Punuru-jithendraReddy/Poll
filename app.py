@@ -25,10 +25,10 @@ if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "submission_error" not in st.session_state: st.session_state.submission_error = None
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
-# --- KEY ROTATION (The Fix for Transmission Error) ---
+# --- KEY ROTATION (Fixes "Transmission Error") ---
 if "form_id" not in st.session_state: st.session_state.form_id = 0
 
-# --- THE VAULT (Permanent Data Storage) ---
+# --- THE VAULT (High Water Mark Storage) ---
 if "vault_data" not in st.session_state: st.session_state.vault_data = []
 
 # URLS
@@ -129,12 +129,9 @@ def submit_vote():
     """Handles submission"""
     name = st.session_state.user_name
     email = st.session_state.user_email
-    
-    # Retrieve selection using dynamic key
     dynamic_key = f"team_select_{st.session_state.form_id}"
     teams = st.session_state.get(dynamic_key, [])
     
-    # Validation Checks
     if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
         st.session_state.submission_error = "⚠️ Submission window closed."
         return
@@ -155,7 +152,6 @@ def submit_vote():
         st.session_state.submission_error = "❌ You have already submitted."
         return
 
-    # Transmission
     try:
         payload = {
             ENTRY_EMAIL: email,
@@ -164,12 +160,8 @@ def submit_vote():
         }
         
         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
-        
         st.session_state.submitted_emails.add(email.strip().lower())
-        
-        # KEY FIX: Increment ID to destroy old widget
-        st.session_state.form_id += 1 
-        
+        st.session_state.form_id += 1 # Reset form
         st.session_state.success_flag = True
         st.session_state.submission_error = None
         
@@ -219,16 +211,13 @@ with st.sidebar:
 
         # BACKEND CLEARED SIGNAL
         st.markdown("---")
-        st.subheader("⚠️ Critical Actions")
+        st.subheader("⚠️ Backend Actions")
+        st.caption("If you deleted data in Google Sheet, click this to reset dashboard.")
         if st.button("🚨 Backend Cleared (Reset All)"):
-            # 1. Clear Vault (Dashboard Memory)
-            st.session_state.vault_data = [] 
-            # 2. Clear Local History
+            st.session_state.vault_data = [] # WIPE MEMORY
             st.session_state.submitted_emails = set()
-            # 3. Reset Form
             st.session_state.form_id += 1
-            
-            st.toast("System Reset: Dashboard cleared to match backend.", icon="🗑️")
+            st.success("System Reset Complete.")
             time.sleep(1)
             st.rerun()
 
@@ -293,12 +282,10 @@ with col_email:
         key="user_email"
     )
 
-# Filter suggestions
 current_user = st.session_state.user_name
 forbidden = USER_SUGGESTIONS.get(current_user, [])
 available_teams = [t for t in TEAM_NAMES if t not in forbidden]
 
-# Import
 with st.expander("Bulk Import"):
     pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
     if st.button("Process Data", disabled=not is_open):
@@ -311,17 +298,14 @@ with st.expander("Bulk Import"):
                 cl = line.strip().lower()
                 if clean_line and clean_line in clean_allowed: matched_lines.append(clean_allowed[cl])
             
-            # Apply to CURRENT form ID
-            current_key = f"team_select_{st.session_state.form_id}"
-            if current_key in st.session_state:
-                st.session_state[current_key] = list(set(st.session_state[current_key] + matched_lines))
+            target_key = f"team_select_{st.session_state.form_id}"
+            if target_key in st.session_state:
+                st.session_state[target_key] = list(set(st.session_state[target_key] + matched_lines))
             else:
-                st.session_state[current_key] = matched_lines
+                st.session_state[target_key] = matched_lines
             st.rerun()
 
-# Selection
 st.markdown("### Target Selection")
-# DYNAMIC KEY - Prevents State Collision
 dynamic_key = f"team_select_{st.session_state.form_id}"
 
 st.multiselect(
@@ -342,36 +326,34 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (PURE SHEET DATA)
+# 8. LIVE DASHBOARD (HIGH WATER MARK LOGIC)
 # ==========================================
 @st.fragment(run_every=10)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. READ GOOGLE SHEET
+        # 1. FETCH
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE EMPTINESS
-        # Empty file or just headers means 0 votes
-        if df.empty or len(df.columns) < 4:
-            server_votes_list = []
-        else:
+        # 2. VALIDATE & PARSE
+        server_votes_list = []
+        if not df.empty and len(df.columns) >= 4:
             magic_column = df.columns[3]
-            # Check if all rows in the voting column are NaN/Empty
-            if df[magic_column].isnull().all():
-                server_votes_list = []
-            else:
+            if not df[magic_column].isnull().all():
                 all_votes_series = df[magic_column].dropna().astype(str)
                 server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
 
-        # 3. UPDATE VAULT (Memory)
-        # If we found real empty data (not network error), we update vault to empty
-        st.session_state.vault_data = server_votes_list
+        # 3. HIGH WATER MARK LOGIC (The Anti-Flicker & Stability Fix)
+        # Rule: Only update if the new count is >= old count. 
+        # This prevents the graph from disappearing if Google sends a partial/empty cached file.
+        if len(server_votes_list) >= len(st.session_state.vault_data):
+            st.session_state.vault_data = server_votes_list
+        # If server_votes_list is smaller (e.g. 0), we ignore it and show old data.
+        # This is why the "Backend Cleared" button is mandatory for resetting.
 
     except Exception:
-        # Network Error -> Keep showing old data (Anti-Flicker)
-        pass
+        pass # Ignore network errors, keep showing old data
 
     # 4. DISPLAY
     total_votes_list = st.session_state.vault_data
