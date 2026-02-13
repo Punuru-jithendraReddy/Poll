@@ -13,19 +13,17 @@ st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centere
 # ==========================================
 # 2. GLOBAL SHARED STATE (THE BRAIN)
 # ==========================================
-# @st.cache_resource makes this object SHARED across ALL users.
-# This fixes the sync issue. Everyone reads from this one variable.
 @st.cache_resource
 def get_shared_state():
     return {
         "end_time": None,
         "is_active": False,
-        "vault_data": [] # Shared "High Water Mark" data
+        "vault_data": [] # Shared Data
     }
 
 shared_state = get_shared_state()
 
-# Local User Session State (Private to each user)
+# Local User Session State
 if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "submission_error" not in st.session_state: st.session_state.submission_error = None
@@ -110,7 +108,7 @@ TEAM_NAMES = [
 ]
 
 USER_SUGGESTIONS = {
-    # (Same mapping as before, truncated for brevity)
+    # (Same mapping)
     "Ramya Lingaraj": [],
     "Devarajan SM": []
 }
@@ -199,8 +197,6 @@ with st.sidebar:
         
         # FORCE REFRESH
         if st.button("🔄 Force Refresh Dashboard"):
-            # Clearing the shared vault triggers a fresh fetch for the next person who updates
-            # But better to just rerun to trigger the dashboard logic immediately
             st.rerun()
             
         # LOCAL DATA RESET
@@ -216,9 +212,8 @@ with st.sidebar:
         # GLOBAL BACKEND RESET
         st.markdown("---")
         st.subheader("⚠️ Global Actions")
-        if st.button("🚨 Backend Cleared (Reset Everyone)"):
-            # This clears the SHARED VAULT for ALL users
-            shared_state["vault_data"] = [] 
+        if st.button("🚨 Backend Cleared (Reset All)"):
+            shared_state["vault_data"] = [] # Instantly Clear Everyone
             st.toast("System Reset: Dashboard cleared for everyone.", icon="🗑️")
             time.sleep(1)
             st.rerun()
@@ -284,7 +279,6 @@ with col_email:
         key="user_email"
     )
 
-# Filter suggestions
 current_user = st.session_state.user_name
 forbidden = USER_SUGGESTIONS.get(current_user, [])
 available_teams = [t for t in TEAM_NAMES if t not in forbidden]
@@ -329,7 +323,7 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (SHARED & SYNCHRONIZED)
+# 8. LIVE DASHBOARD (SHARED SMART SYNC)
 # ==========================================
 @st.fragment(run_every=10)
 def live_dashboard():
@@ -340,43 +334,39 @@ def live_dashboard():
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
         server_votes_list = []
-        is_empty = False
+        is_server_empty = False
 
+        # 2. ANALYZE DATA
         if df.empty or len(df.columns) < 4:
-            is_empty = True
+            is_server_empty = True
         else:
             magic_column = df.columns[3]
             if df[magic_column].isnull().all():
-                is_empty = True
+                is_server_empty = True
             else:
                 all_votes_series = df[magic_column].dropna().astype(str)
                 server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
                 
-                # Check actual list content
                 if not server_votes_list:
-                    is_empty = True
+                    is_server_empty = True
 
-        # 2. SHARED HIGH WATER MARK LOGIC
-        # We only update the shared state if:
-        # A) We have MORE/EQUAL data than what's currently there (Growth)
-        # B) The current shared state is empty (Initialization)
-        # We DO NOT update if server_votes_list is empty but shared state has data (protects against flicker)
+        # 3. SMART SYNC (Allows Deletion, Stops Flickering)
+        # Logic: 
+        # - If server has data -> Update Shared State immediately.
+        # - If server is empty -> Update Shared State to Empty (Deletion allowed).
+        # - If Exception -> Do NOTHING (Prevents flickering on network error).
         
-        current_vault_len = len(shared_state["vault_data"])
-        new_data_len = len(server_votes_list)
-
-        if not is_empty:
-            if new_data_len >= current_vault_len:
-                # We found valid data that is >= what we knew. Update everyone.
-                shared_state["vault_data"] = server_votes_list
-        
-        # Note: If is_empty is True, we do nothing. We keep the old data visible.
-        # Unless the Admin clicked "Reset", which clears shared_state["vault_data"] manually.
+        # We only reach here if NO exception occurred.
+        if is_server_empty:
+            shared_state["vault_data"] = []
+        else:
+            shared_state["vault_data"] = server_votes_list
 
     except Exception:
+        # Network failed? Keep showing the old Shared State.
         pass 
 
-    # 3. DISPLAY FROM SHARED VAULT
+    # 4. DISPLAY
     total_votes_list = shared_state["vault_data"]
     
     if total_votes_list:
