@@ -26,8 +26,6 @@ if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
 # --- THE VAULT (Permanent Data Storage) ---
-# We initialize this once. It holds the data to display.
-# We NEVER overwrite this with empty data.
 if "vault_data" not in st.session_state: st.session_state.vault_data = []
 
 # ==========================================
@@ -153,7 +151,6 @@ with st.sidebar:
 
         # FLUSH CACHE
         st.markdown("---")
-        st.caption("Use this to clear data if you manually deleted the Google Sheet.")
         if st.button("🧹 Force Reset Data"):
             st.session_state.submitted_emails = set()
             st.session_state.vault_data = [] # CLEAR THE VAULT
@@ -331,7 +328,7 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (SOLID STATE - NO FLICKER)
+# 8. LIVE DASHBOARD (SMART FLICKER PROTECTION)
 # ==========================================
 @st.fragment(run_every=3)
 def live_dashboard():
@@ -341,21 +338,23 @@ def live_dashboard():
         # 1. FETCH FROM SERVER
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE DATA
-        if not df.empty and len(df.columns) >= 4:
-            magic_column = df.columns[3]
-            all_votes_series = df[magic_column].dropna().astype(str)
-            new_server_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-            
-            # 3. UPDATE VAULT (Only if data exists)
-            # We never overwrite the vault with an empty list from a network error
-            if new_server_list:
+        # 2. VALIDATE (Smart Logic)
+        if len(df.columns) >= 4:
+            if not df.empty:
+                # CASE A: Valid Data Found -> Update the Vault immediately
+                magic_column = df.columns[3]
+                all_votes_series = df[magic_column].dropna().astype(str)
+                new_server_list = all_votes_series.str.split(',').explode().str.strip().tolist()
                 st.session_state.vault_data = new_server_list
+            else:
+                # CASE B: Valid Headers but Empty Rows -> Means User Deleted Data -> Clear Vault
+                st.session_state.vault_data = []
+        
     except:
-        # If network error, DO NOTHING. Keep the old Vault data displayed.
+        # CASE C: Network Error / Timeout -> Do NOT clear vault. Keep showing old data.
         pass
 
-    # 4. DISPLAY FROM VAULT
+    # 3. RENDER FROM VAULT
     total_votes_list = st.session_state.vault_data
     
     if total_votes_list:
@@ -410,6 +409,6 @@ def live_dashboard():
 
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     else:
-        st.info("Connecting to HQ...")
+        st.info("No votes logged yet.")
 
 live_dashboard()
