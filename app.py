@@ -214,7 +214,7 @@ with st.sidebar:
 # 6. APP UI
 # ==========================================
 st.title("Identity Intel")
-st.caption("Choose your team name wisely")
+st.caption("Choose your team name wisely let it reflect your vision passion and winning spirit.")
 
 @st.fragment(run_every=1)
 def timer_status_panel():
