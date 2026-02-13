@@ -11,9 +11,8 @@ import time
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# 2. GLOBAL SHARED STATE (The "Brain")
+# 2. GLOBAL SHARED STATE
 # ==========================================
-# This allows all users to see the same Dashboard data instantly
 @st.cache_resource
 def get_shared_state():
     return {
@@ -28,10 +27,8 @@ shared_state = get_shared_state()
 if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "submission_error" not in st.session_state: st.session_state.submission_error = None
-if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
-
-# --- KEY ROTATION (Fixes "Transmission Error") ---
 if "form_id" not in st.session_state: st.session_state.form_id = 0
+if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
 # URLS
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
@@ -111,7 +108,7 @@ TEAM_NAMES = [
 ]
 
 USER_SUGGESTIONS = {
-    # (Same mapping as before)
+    # (Same mapping)
     "Ramya Lingaraj": [],
     "Devarajan SM": []
 }
@@ -131,17 +128,13 @@ def submit_vote():
     """Handles submission"""
     name = st.session_state.user_name
     email = st.session_state.user_email
-    
-    # Retrieve selection using dynamic key
     dynamic_key = f"team_select_{st.session_state.form_id}"
     teams = st.session_state.get(dynamic_key, [])
     
-    # Timer Check
     if not shared_state["is_active"] or (shared_state["end_time"] and time.time() > shared_state["end_time"]):
         st.session_state.submission_error = "⚠️ Submission window closed."
         return
 
-    # Validation
     if name == "Select identity..." or not email:
         st.session_state.submission_error = "❌ Identity Required."
         return
@@ -167,10 +160,7 @@ def submit_vote():
         
         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
         st.session_state.submitted_emails.add(email.strip().lower())
-        
-        # KEY ROTATION: This destroys the old widget and makes a new empty one
         st.session_state.form_id += 1 
-        
         st.session_state.success_flag = True
         st.session_state.submission_error = None
         
@@ -178,7 +168,7 @@ def submit_vote():
         st.session_state.submission_error = f"Transmission Error: {e}"
 
 # ==========================================
-# 5. ADMIN CONTROLS
+# 5. ADMIN CONTROLS (WITH DATA TABLE)
 # ==========================================
 with st.sidebar:
     st.header("Admin Access")
@@ -187,6 +177,32 @@ with st.sidebar:
     if admin_pw == "admin123":
         st.success("Authorized")
         st.markdown("---")
+        
+        # --- NEW: ADMIN DATA TABLE ---
+        st.subheader("📊 Vote Statistics")
+        current_data = shared_state["vault_data"]
+        
+        if current_data:
+            # 1. Calculate Stats
+            df_admin = pd.DataFrame(current_data, columns=['Team Name'])
+            admin_counts = df_admin['Team Name'].value_counts().reset_index()
+            admin_counts.columns = ['Team Name', 'Votes']
+            
+            # 2. Display Metrics
+            st.metric("Total Votes Cast", len(current_data))
+            
+            # 3. Display Table
+            st.dataframe(
+                admin_counts, 
+                hide_index=True, 
+                use_container_width=True,
+                height=300
+            )
+        else:
+            st.info("No data available yet.")
+            
+        st.markdown("---")
+        st.subheader("Controls")
         
         # SHARED TIMER
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
@@ -218,7 +234,6 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("⚠️ Global Actions")
         if st.button("🚨 Backend Cleared (Reset All)"):
-            # This wipes the shared memory for ALL users
             shared_state["vault_data"] = [] 
             st.toast("System Reset: Dashboard cleared for everyone.", icon="🗑️")
             time.sleep(1)
@@ -298,7 +313,6 @@ with st.expander("Bulk Import"):
             st.rerun()
 
 st.markdown("### Target Selection")
-# DYNAMIC KEY (Fixes State Error)
 dynamic_key = f"team_select_{st.session_state.form_id}"
 
 st.multiselect("Combobox Search", options=available_teams, key=dynamic_key, label_visibility="collapsed", placeholder="Search manually or review imported targets...", disabled=not is_open)
@@ -312,14 +326,13 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (SMART COLUMN FINDER & SHARED STATE)
+# 8. LIVE DASHBOARD (SMART COLUMN FINDER)
 # ==========================================
 @st.fragment(run_every=10)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. READ GOOGLE SHEET
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
         server_votes_list = []
@@ -328,11 +341,9 @@ def live_dashboard():
         if df.empty:
             is_empty = True
         else:
-            # --- SMART COLUMN FINDER ---
-            # Finds the column that actually contains team names
+            # Smart Column Finder
             found_col = None
             for col in df.columns:
-                # Check top 20 rows of every column
                 sample_values = df[col].dropna().astype(str).tolist()[:20]
                 for val in sample_values:
                     parts = [p.strip() for p in val.split(',')]
@@ -346,12 +357,8 @@ def live_dashboard():
                 all_votes_series = df[found_col].dropna().astype(str)
                 server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
             else:
-                # Fallback: If sheet has data but no team names match, maybe it's new data?
-                # Check if we have at least 2 cols (Timestamp, ..., Selection)
                 if len(df.columns) >= 2:
-                    # Last column is usually the target
                     last_col = df.columns[-1]
-                    # Only accept if it's not all empty
                     if not df[last_col].isnull().all():
                         all_votes_series = df[last_col].dropna().astype(str)
                         server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
@@ -360,28 +367,18 @@ def live_dashboard():
                 else:
                     is_empty = True
 
-        # 2. UPDATE SHARED STATE (High Water Mark Logic)
-        # Prevents flickering if server returns partial/empty data temporarily
-        # Only updates if we have MORE or EQUAL data than before.
-        # UNLESS the sheet is truly empty (Admin Reset or manual delete).
-        
+        # HIGH WATER MARK LOGIC
         current_len = len(shared_state["vault_data"])
         new_len = len(server_votes_list)
 
         if is_empty:
-            # If sheet is empty, respect that.
             shared_state["vault_data"] = []
         elif new_len >= current_len:
-            # If we found valid data and it's not smaller than what we had, update.
             shared_state["vault_data"] = server_votes_list
-        
-        # If new_len < current_len (and not empty), it might be a glitch, so we hold old data.
-        # This stops the "flicker".
 
     except Exception:
         pass 
 
-    # 3. RENDER
     total_votes_list = shared_state["vault_data"]
     
     if total_votes_list:
