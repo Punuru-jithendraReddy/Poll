@@ -11,26 +11,22 @@ import time
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# 2. GLOBAL STATE & CONFIG
+# 2. CONFIGURATION
 # ==========================================
+# Timer Config
 @st.cache_resource
 def get_global_config():
     return {"end_time": None, "is_active": False}
 
 global_config = get_global_config()
 
-# Initialize Session State
+# Basic Session State
 if "team_select" not in st.session_state: st.session_state.team_select = []
 if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
-# --- THE VAULT (Permanent Data Storage) ---
-if "vault_data" not in st.session_state: st.session_state.vault_data = []
-
-# ==========================================
-# 3. CONFIGURATION (URLS)
-# ==========================================
+# URLS
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 ENTRY_EMAIL = "emailAddress"
 ENTRY_NAME = "entry.1398544706"
@@ -38,7 +34,7 @@ ENTRY_MAGIC = "entry.921793836"
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
 
 # ==========================================
-# 4. MASTER DATA
+# 3. MASTER DATA
 # ==========================================
 USER_NAMES = [
     "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
@@ -124,7 +120,7 @@ USER_SUGGESTIONS = {
 }
 
 # ==========================================
-# 5. ADMIN CONTROLS
+# 4. ADMIN CONTROLS (Timer & RESET)
 # ==========================================
 with st.sidebar:
     st.header("Admin Access")
@@ -149,17 +145,13 @@ with st.sidebar:
                 global_config["end_time"] = None
                 st.rerun()
 
-        # FLUSH CACHE
+        # FORCE REFRESH
         st.markdown("---")
-        if st.button("🧹 Force Reset Data"):
-            st.session_state.submitted_emails = set()
-            st.session_state.vault_data = [] # CLEAR THE VAULT
-            st.success("Dashboard Reset.")
-            time.sleep(1)
+        if st.button("🔄 Force Refresh Dashboard"):
             st.rerun()
 
 # ==========================================
-# 6. WATCHDOG / TIMER
+# 5. WATCHDOG / TIMER
 # ==========================================
 st.title("Identity Intel")
 st.caption("Choose your team name wisely")
@@ -192,7 +184,7 @@ def timer_status_panel():
 timer_status_panel()
 
 # ==========================================
-# 7. MAIN APP LOGIC
+# 6. MAIN APP LOGIC
 # ==========================================
 is_open = st.session_state.last_known_is_open
 
@@ -242,20 +234,8 @@ final_selections = st.multiselect(
     disabled=not is_open
 )
 
-# Helper function to get current total votes from server
-def get_total_vote_count():
-    try:
-        df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
-        if not df.empty and len(df.columns) >= 4:
-            magic_column = df.columns[3]
-            all_votes = df[magic_column].dropna().astype(str).str.split(',').explode().str.strip().tolist()
-            return len(all_votes)
-        return 0
-    except:
-        return 0
-
 # ==========================================
-# SUBMISSION LOGIC (Strict Sync Mode)
+# SUBMISSION LOGIC
 # ==========================================
 st.write("")
 if is_open:
@@ -278,21 +258,10 @@ if is_open:
             if target_email in st.session_state.submitted_emails:
                 is_duplicate = True
             
-            if not is_duplicate:
-                try:
-                    check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
-                    df = pd.read_csv(check_url, on_bad_lines='skip')
-                    df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-                    if (df_string == target_email).any().any():
-                        is_duplicate = True
-                except:
-                    pass
-            
             # --- SUBMISSION ---
             if is_duplicate:
-                st.error("This email has already submitted.")
+                st.error("This email has already submitted (Local Check).")
             else:
-                # Use Standard Payload
                 payload = {
                     ENTRY_EMAIL: user_email,
                     ENTRY_NAME: user_name,
@@ -300,23 +269,11 @@ if is_open:
                 }
                 
                 try:
-                    # 1. Capture count BEFORE submit
-                    pre_submit_count = get_total_vote_count()
-                    
-                    # 2. SEND DATA
+                    # 1. SEND DATA
                     requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
                     st.session_state.submitted_emails.add(target_email)
                     
-                    # 3. STRICT WAIT LOOP (Loading spinner until data arrives)
-                    with st.spinner("📡 Transmitting & Verifying... Please wait..."):
-                        start_wait = time.time()
-                        # Wait max 10 seconds
-                        while time.time() - start_wait < 10:
-                            time.sleep(2)
-                            current_count = get_total_vote_count()
-                            if current_count > pre_submit_count:
-                                break
-                    
+                    # 2. SUCCESS & REFRESH
                     st.session_state.team_select = []
                     st.session_state.success_flag = True
                     st.rerun()
@@ -328,87 +285,81 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (SMART FLICKER PROTECTION)
+# 8. LIVE DASHBOARD (PURE READ - 10s REFRESH)
 # ==========================================
-@st.fragment(run_every=3)
+@st.fragment(run_every=10)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. FETCH FROM SERVER
+        # 1. READ GOOGLE SHEET DIRECTLY
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE (Smart Logic)
-        if len(df.columns) >= 4:
-            if not df.empty:
-                # CASE A: Valid Data Found -> Update the Vault immediately
-                magic_column = df.columns[3]
-                all_votes_series = df[magic_column].dropna().astype(str)
-                new_server_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-                st.session_state.vault_data = new_server_list
-            else:
-                # CASE B: Valid Headers but Empty Rows -> Means User Deleted Data -> Clear Vault
-                st.session_state.vault_data = []
-        
-    except:
-        # CASE C: Network Error / Timeout -> Do NOT clear vault. Keep showing old data.
-        pass
-
-    # 3. RENDER FROM VAULT
-    total_votes_list = st.session_state.vault_data
-    
-    if total_votes_list:
-        df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
-        vote_counts = df_combined['Designation'].value_counts()
-        
-        col_sort, col_slider = st.columns([1, 1])
-        with col_sort:
-            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
-        with col_slider:
-            top_n = st.slider("Display Top:", 5, 100, 30, 5)
-
-        vote_counts = vote_counts.head(top_n)
-        
-        df_plot = vote_counts.reset_index()
-        df_plot.columns = ['Designation', 'Votes']
-
-        if sort_order == "Most Votes":
-            df_plot = df_plot.sort_values(by='Votes', ascending=True)
+        # 2. PARSE DATA
+        if not df.empty and len(df.columns) >= 4:
+            magic_column = df.columns[3]
+            all_votes_series = df[magic_column].dropna().astype(str)
+            server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
         else:
-            df_plot = df_plot.sort_values(by='Designation', ascending=False)
+            server_votes_list = []
 
-        fig = px.bar(
-            df_plot,
-            x="Votes",
-            y="Designation",
-            orientation="h",
-            text="Votes"
-        )
+        # 3. DISPLAY
+        if server_votes_list:
+            df_combined = pd.DataFrame(server_votes_list, columns=['Designation'])
+            vote_counts = df_combined['Designation'].value_counts()
+            
+            col_sort, col_slider = st.columns([1, 1])
+            with col_sort:
+                sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+            with col_slider:
+                top_n = st.slider("Display Top:", 5, 100, 30, 5)
 
-        fig.update_traces(
-            marker=dict(
-                color=df_plot["Votes"],
-                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                line=dict(width=0)
-            ),
-            textposition="outside",
-            cliponaxis=False
-        )
-        
-        dynamic_height = max(300, len(df_plot) * 35)
-        fig.update_layout(
-            height=dynamic_height,
-            bargap=0.35,
-            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
-            yaxis=dict(title=""),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=0, r=0, t=20, b=0),
-            font=dict(color="#0F172A")
-        )
+            vote_counts = vote_counts.head(top_n)
+            
+            df_plot = vote_counts.reset_index()
+            df_plot.columns = ['Designation', 'Votes']
 
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    else:
-        st.info("No votes logged yet.")
+            if sort_order == "Most Votes":
+                df_plot = df_plot.sort_values(by='Votes', ascending=True)
+            else:
+                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+            fig = px.bar(
+                df_plot,
+                x="Votes",
+                y="Designation",
+                orientation="h",
+                text="Votes"
+            )
+
+            fig.update_traces(
+                marker=dict(
+                    color=df_plot["Votes"],
+                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                    line=dict(width=0)
+                ),
+                textposition="outside",
+                cliponaxis=False
+            )
+            
+            dynamic_height = max(300, len(df_plot) * 35)
+            fig.update_layout(
+                height=dynamic_height,
+                bargap=0.35,
+                xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+                yaxis=dict(title=""),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=20, b=0),
+                font=dict(color="#0F172A")
+            )
+
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No votes logged yet.")
+
+    except:
+        # If network error, just wait for next 10s cycle
+        st.warning("Syncing with HQ...")
 
 live_dashboard()
