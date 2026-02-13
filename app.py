@@ -27,10 +27,7 @@ if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_
 
 # --- KEY ROTATION (The Fix for Transmission Error) ---
 # We increment this number to force-reset the widget safely
-if "widget_key_id" not in st.session_state: st.session_state.widget_key_id = 0
-
-# --- THE VAULT (Permanent Data Storage) ---
-if "vault_data" not in st.session_state: st.session_state.vault_data = []
+if "form_id" not in st.session_state: st.session_state.form_id = 0
 
 # URLS
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
@@ -110,7 +107,7 @@ TEAM_NAMES = [
 ]
 
 USER_SUGGESTIONS = {
-    # (Same list as before, truncated for brevity)
+    # (Truncated for brevity, all mapping logic remains)
     "Ramya Lingaraj": [],
     "Devarajan SM": []
 }
@@ -131,9 +128,10 @@ def submit_vote():
     # 1. Get Values
     name = st.session_state.user_name
     email = st.session_state.user_email
-    # Retrieve the selection using the DYNAMIC KEY
-    current_key = f"team_select_{st.session_state.widget_key_id}"
-    teams = st.session_state.get(current_key, [])
+    
+    # Retrieve selection using dynamic key
+    dynamic_key = f"team_select_{st.session_state.form_id}"
+    teams = st.session_state.get(dynamic_key, [])
     
     # 2. Timer Check
     if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
@@ -172,8 +170,8 @@ def submit_vote():
         # 6. Success Actions
         st.session_state.submitted_emails.add(email.strip().lower())
         
-        # KEY FIX: Increment the ID to force a FRESH widget on redraw
-        st.session_state.widget_key_id += 1 
+        # MAGIC FIX: Increment ID to destroy old widget and spawn a new one
+        st.session_state.form_id += 1 
         
         st.session_state.success_flag = True
         st.session_state.submission_error = None
@@ -217,7 +215,7 @@ with st.sidebar:
             st.session_state.submitted_emails = set()
             st.session_state.success_flag = False
             st.session_state.submission_error = None
-            st.session_state.widget_key_id += 1 # Reset form
+            st.session_state.form_id += 1 # Reset form
             st.success("Local history cleared.")
             time.sleep(1)
             st.rerun()
@@ -302,15 +300,18 @@ with st.expander("Bulk Import"):
                 cl = line.strip().lower()
                 if clean_line and clean_line in clean_allowed: matched_lines.append(clean_allowed[cl])
             
-            # Pre-fill session state for the specific key
-            target_key = f"team_select_{st.session_state.widget_key_id}"
-            st.session_state[target_key] = list(set(st.session_state.get(target_key, []) + matched_lines))
+            # Apply to CURRENT form ID
+            current_key = f"team_select_{st.session_state.form_id}"
+            if current_key in st.session_state:
+                st.session_state[current_key] = list(set(st.session_state[current_key] + matched_lines))
+            else:
+                st.session_state[current_key] = matched_lines
             st.rerun()
 
 # Selection
 st.markdown("### Target Selection")
-# DYNAMIC KEY - This is the magic that fixes the Transmission Error
-dynamic_key = f"team_select_{st.session_state.widget_key_id}"
+# DYNAMIC KEY - Prevents State Collision
+dynamic_key = f"team_select_{st.session_state.form_id}"
 
 st.multiselect(
     "Combobox Search",
@@ -340,95 +341,79 @@ def live_dashboard():
         # 1. READ GOOGLE SHEET
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE
-        is_empty = False
-        server_votes_list = []
-
+        # 2. VALIDATE EMPTINESS
+        # Empty file or just headers means 0 votes
         if df.empty or len(df.columns) < 4:
-            is_empty = True
+            server_votes_list = []
         else:
             magic_column = df.columns[3]
-            # Check if column is actually empty of values
+            # Check if all rows in the voting column are NaN/Empty
             if df[magic_column].isnull().all():
-                is_empty = True
+                server_votes_list = []
             else:
                 all_votes_series = df[magic_column].dropna().astype(str)
                 server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-                
-                # Double check list emptiness
-                if not server_votes_list:
-                    is_empty = True
 
-        # 3. UPDATE VAULT LOGIC
-        if is_empty:
-            # Explicitly empty vault if sheet is empty (User deleted data)
-            st.session_state.vault_data = []
+        # 3. DISPLAY
+        if server_votes_list:
+            df_combined = pd.DataFrame(server_votes_list, columns=['Designation'])
+            vote_counts = df_combined['Designation'].value_counts()
+            
+            col_sort, col_slider = st.columns([1, 1])
+            with col_sort:
+                sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+            with col_slider:
+                top_n = st.slider("Display Top:", 5, 100, 30, 5)
+
+            vote_counts = vote_counts.head(top_n)
+            
+            df_plot = vote_counts.reset_index()
+            df_plot.columns = ['Designation', 'Votes']
+
+            if sort_order == "Most Votes":
+                df_plot = df_plot.sort_values(by='Votes', ascending=True)
+            else:
+                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+            fig = px.bar(
+                df_plot,
+                x="Votes",
+                y="Designation",
+                orientation="h",
+                text="Votes"
+            )
+
+            fig.update_traces(
+                marker=dict(
+                    color=df_plot["Votes"],
+                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                    line=dict(width=0)
+                ),
+                textposition="outside",
+                cliponaxis=False
+            )
+            
+            dynamic_height = max(300, len(df_plot) * 35)
+            fig.update_layout(
+                height=dynamic_height,
+                bargap=0.35,
+                xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+                yaxis=dict(title=""),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=20, b=0),
+                font=dict(color="#0F172A")
+            )
+
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         else:
-            # Valid data -> Update Vault
-            st.session_state.vault_data = server_votes_list
+            st.info("No votes logged yet.")
 
-    except pd.errors.EmptyDataError:
-        # Sheet is completely empty (0 bytes) -> Clear Vault
-        st.session_state.vault_data = []
-    except Exception:
-        # Network Error -> Do NOT clear vault, keep showing old data (Anti-Flicker)
-        pass
-
-    # 4. DISPLAY FROM VAULT
-    total_votes_list = st.session_state.vault_data
-    
-    if total_votes_list:
-        df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
-        vote_counts = df_combined['Designation'].value_counts()
-        
-        col_sort, col_slider = st.columns([1, 1])
-        with col_sort:
-            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
-        with col_slider:
-            top_n = st.slider("Display Top:", 5, 100, 30, 5)
-
-        vote_counts = vote_counts.head(top_n)
-        
-        df_plot = vote_counts.reset_index()
-        df_plot.columns = ['Designation', 'Votes']
-
-        if sort_order == "Most Votes":
-            df_plot = df_plot.sort_values(by='Votes', ascending=True)
+    except Exception as e:
+        # Only show error if it's NOT an empty file error
+        if "No columns to parse" in str(e) or "EmptyDataError" in str(e):
+             st.info("No votes logged yet.")
         else:
-            df_plot = df_plot.sort_values(by='Designation', ascending=False)
-
-        fig = px.bar(
-            df_plot,
-            x="Votes",
-            y="Designation",
-            orientation="h",
-            text="Votes"
-        )
-
-        fig.update_traces(
-            marker=dict(
-                color=df_plot["Votes"],
-                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                line=dict(width=0)
-            ),
-            textposition="outside",
-            cliponaxis=False
-        )
-        
-        dynamic_height = max(300, len(df_plot) * 35)
-        fig.update_layout(
-            height=dynamic_height,
-            bargap=0.35,
-            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
-            yaxis=dict(title=""),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=0, r=0, t=20, b=0),
-            font=dict(color="#0F172A")
-        )
-
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    else:
-        st.info("No votes logged yet.")
+             st.warning("Syncing with HQ...")
 
 live_dashboard()
