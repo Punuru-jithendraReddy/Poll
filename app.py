@@ -145,9 +145,19 @@ with st.sidebar:
                 global_config["end_time"] = None
                 st.rerun()
 
-        # FORCE REFRESH
         st.markdown("---")
+        
+        # FORCE REFRESH
         if st.button("🔄 Force Refresh Dashboard"):
+            st.rerun()
+            
+        # LOCAL DATA RESET
+        if st.button("🧹 Clear Local Data"):
+            st.session_state.submitted_emails = set()
+            st.session_state.team_select = []
+            st.session_state.success_flag = False
+            st.success("Local data cleared!")
+            time.sleep(1)
             st.rerun()
 
 # ==========================================
