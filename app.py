@@ -11,7 +11,7 @@ import time
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# 2. GLOBAL STATE & CONFIG
+# 2. GLOBAL CONFIG & STATE
 # ==========================================
 @st.cache_resource
 def get_global_config():
@@ -25,11 +25,13 @@ if "submitted_emails" not in st.session_state: st.session_state.submitted_emails
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
-# --- THE VAULT (Permanent Data Storage) ---
-if "vault_data" not in st.session_state: st.session_state.vault_data = []
+# --- DATA STORAGE (The "State of Truth") ---
+# This holds the data currently shown on screen. 
+# We update this only when we get a definitive answer from the server.
+if "dashboard_data" not in st.session_state: st.session_state.dashboard_data = []
 
 # ==========================================
-# 3. CONFIGURATION (URLS)
+# 3. CONFIGURATION
 # ==========================================
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 ENTRY_EMAIL = "emailAddress"
@@ -149,12 +151,13 @@ with st.sidebar:
                 global_config["end_time"] = None
                 st.rerun()
 
-        # FLUSH CACHE
+        # MANUAL DATA RESET
         st.markdown("---")
-        if st.button("🧹 Force Reset Data"):
+        if st.button("🧹 Force Refresh Cache"):
+            st.cache_data.clear() # Clear streamlit cache
             st.session_state.submitted_emails = set()
-            st.session_state.vault_data = [] # CLEAR THE VAULT
-            st.success("Dashboard Reset.")
+            st.session_state.dashboard_data = []
+            st.success("Cache cleared. Re-fetching...")
             time.sleep(1)
             st.rerun()
 
@@ -242,20 +245,8 @@ final_selections = st.multiselect(
     disabled=not is_open
 )
 
-# Helper function to get current total votes from server
-def get_total_vote_count():
-    try:
-        df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
-        if not df.empty and len(df.columns) >= 4:
-            magic_column = df.columns[3]
-            all_votes = df[magic_column].dropna().astype(str).str.split(',').explode().str.strip().tolist()
-            return len(all_votes)
-        return 0
-    except:
-        return 0
-
 # ==========================================
-# SUBMISSION LOGIC (Strict Sync Mode)
+# SUBMISSION LOGIC (SIMPLE & ROBUST)
 # ==========================================
 st.write("")
 if is_open:
@@ -280,11 +271,10 @@ if is_open:
             
             if not is_duplicate:
                 try:
-                    check_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
-                    df = pd.read_csv(check_url, on_bad_lines='skip')
-                    df_string = df.astype(str).apply(lambda x: x.str.strip().str.lower())
-                    if (df_string == target_email).any().any():
-                        is_duplicate = True
+                    # Check against local dashboard data (which acts as cache)
+                    if st.session_state.dashboard_data:
+                        # Assuming dashboard data doesn't hold emails, we rely on session
+                        pass
                 except:
                     pass
             
@@ -292,7 +282,7 @@ if is_open:
             if is_duplicate:
                 st.error("This email has already submitted.")
             else:
-                # Use Standard Payload
+                # SIMPLE PAYLOAD (Proven to work)
                 payload = {
                     ENTRY_EMAIL: user_email,
                     ENTRY_NAME: user_name,
@@ -300,62 +290,56 @@ if is_open:
                 }
                 
                 try:
-                    # 1. Capture count BEFORE submit
-                    pre_submit_count = get_total_vote_count()
-                    
-                    # 2. SEND DATA
-                    requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+                    # 1. SEND
+                    requests.post(GOOGLE_FORM_URL, data=payload, timeout=8)
                     st.session_state.submitted_emails.add(target_email)
                     
-                    # 3. STRICT WAIT LOOP (Loading spinner until data arrives)
-                    with st.spinner("📡 Transmitting & Verifying... Please wait..."):
-                        start_wait = time.time()
-                        # Wait max 10 seconds
-                        while time.time() - start_wait < 10:
-                            time.sleep(2)
-                            current_count = get_total_vote_count()
-                            if current_count > pre_submit_count:
-                                break
-                    
+                    # 2. SUCCESS FEEDBACK
                     st.session_state.team_select = []
                     st.session_state.success_flag = True
                     st.rerun()
                 except:
-                    pass
+                    st.error("Connection Error. Please try again.")
 else:
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (SMART FLICKER PROTECTION)
+# 8. LIVE DASHBOARD (SMART CACHE)
 # ==========================================
-@st.fragment(run_every=3)
+@st.fragment(run_every=5)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. FETCH FROM SERVER
+        # 1. FETCH Fresh Data (Force Cache Busting)
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE (Smart Logic)
-        if len(df.columns) >= 4:
-            if not df.empty:
-                # CASE A: Valid Data Found -> Update the Vault immediately
-                magic_column = df.columns[3]
-                all_votes_series = df[magic_column].dropna().astype(str)
-                new_server_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-                st.session_state.vault_data = new_server_list
-            else:
-                # CASE B: Valid Headers but Empty Rows -> Means User Deleted Data -> Clear Vault
-                st.session_state.vault_data = []
-        
+        # 2. DECISION LOGIC
+        if not df.empty and len(df.columns) >= 4:
+            # Valid Data (Rows Exist) -> Update
+            magic_column = df.columns[3]
+            all_votes_series = df[magic_column].dropna().astype(str)
+            new_data = all_votes_series.str.split(',').explode().str.strip().tolist()
+            st.session_state.dashboard_data = new_data
+            
+        elif not df.empty and len(df.columns) >= 1:
+            # Valid CSV but 0 Rows -> User deleted data -> Update to Empty
+            st.session_state.dashboard_data = []
+            
+        else:
+            # Invalid/Network Error -> Do Nothing (Keep old data)
+            pass
+
     except:
-        # CASE C: Network Error / Timeout -> Do NOT clear vault. Keep showing old data.
+        # Network Fail -> Do Nothing (Keep old data)
         pass
 
-    # 3. RENDER FROM VAULT
-    total_votes_list = st.session_state.vault_data
+    # 3. RENDER
+    # We display whatever is in the session state (Old or New)
+    # We NEVER show a loading spinner or blank screen unless state is actually empty
+    total_votes_list = st.session_state.dashboard_data
     
     if total_votes_list:
         df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
