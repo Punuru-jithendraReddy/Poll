@@ -26,6 +26,9 @@ if "submitted_emails" not in st.session_state: st.session_state.submitted_emails
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
+# --- THE VAULT (Permanent Data Storage) ---
+if "vault_data" not in st.session_state: st.session_state.vault_data = []
+
 # URLS
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
 ENTRY_EMAIL = "emailAddress"
@@ -245,11 +248,13 @@ final_selections = st.multiselect(
 )
 
 # ==========================================
-# SUBMISSION LOGIC
+# SUBMISSION LOGIC (SAFEGUARDED)
 # ==========================================
 st.write("")
 if is_open:
     if st.button("Submit Selections", type="primary", use_container_width=True):
+        
+        # 1. IMMEDIATE VALIDATION (Prevents empty submissions)
         if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
             st.error("⚠️ Submission window closed just now.")
             time.sleep(2)
@@ -257,21 +262,22 @@ if is_open:
         elif user_name == "Select identity..." or not user_email:
             st.error("Please provide Name and Email.")
         elif not final_selections:
+            # THIS IS THE FIX: Stops here if no team is selected.
             st.error("Please select at least one target.")
         elif not re.match(r"^[a-zA-Z0-9_.+-]+@svarappstech\.com$", user_email):
              st.error("Invalid email. Only @svarappstech.com emails are allowed.")
         else:
-            # --- DUPLICATE CHECK START ---
+            # --- DUPLICATE CHECK ---
             is_duplicate = False
             target_email = user_email.strip().lower()
 
             if target_email in st.session_state.submitted_emails:
                 is_duplicate = True
             
-            # --- SUBMISSION ---
             if is_duplicate:
                 st.error("This email has already submitted (Local Check).")
             else:
+                # --- PREPARE DATA ---
                 payload = {
                     ENTRY_EMAIL: user_email,
                     ENTRY_NAME: user_name,
@@ -279,16 +285,21 @@ if is_open:
                 }
                 
                 try:
-                    # 1. SEND DATA
-                    requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
-                    st.session_state.submitted_emails.add(target_email)
+                    # 2. SEND DATA
+                    response = requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
                     
-                    # 2. SUCCESS & REFRESH
+                    # 3. VERIFY SUCCESS (Only add email if 200 OK)
+                    response.raise_for_status() 
+                    
+                    # If we reach here, it was successful
+                    st.session_state.submitted_emails.add(target_email)
                     st.session_state.team_select = []
                     st.session_state.success_flag = True
                     st.rerun()
-                except:
-                    pass
+                    
+                except Exception as e:
+                    # If any error (Network, 400, 500), do NOT add email. Allow retry.
+                    st.error(f"Transmission Error: {e}. Please try again.")
 else:
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
 
@@ -305,71 +316,77 @@ def live_dashboard():
         # 1. READ GOOGLE SHEET DIRECTLY
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. PARSE DATA
-        if not df.empty and len(df.columns) >= 4:
-            magic_column = df.columns[3]
-            all_votes_series = df[magic_column].dropna().astype(str)
-            server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-        else:
-            server_votes_list = []
-
-        # 3. DISPLAY
-        if server_votes_list:
-            df_combined = pd.DataFrame(server_votes_list, columns=['Designation'])
-            vote_counts = df_combined['Designation'].value_counts()
-            
-            col_sort, col_slider = st.columns([1, 1])
-            with col_sort:
-                sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
-            with col_slider:
-                top_n = st.slider("Display Top:", 5, 100, 30, 5)
-
-            vote_counts = vote_counts.head(top_n)
-            
-            df_plot = vote_counts.reset_index()
-            df_plot.columns = ['Designation', 'Votes']
-
-            if sort_order == "Most Votes":
-                df_plot = df_plot.sort_values(by='Votes', ascending=True)
+        # 2. VALIDATE (Smart Logic)
+        if len(df.columns) >= 4:
+            if not df.empty:
+                # CASE A: Valid Data Found -> Update the Vault immediately
+                magic_column = df.columns[3]
+                all_votes_series = df[magic_column].dropna().astype(str)
+                new_server_list = all_votes_series.str.split(',').explode().str.strip().tolist()
+                st.session_state.vault_data = new_server_list
             else:
-                df_plot = df_plot.sort_values(by='Designation', ascending=False)
-
-            fig = px.bar(
-                df_plot,
-                x="Votes",
-                y="Designation",
-                orientation="h",
-                text="Votes"
-            )
-
-            fig.update_traces(
-                marker=dict(
-                    color=df_plot["Votes"],
-                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                    line=dict(width=0)
-                ),
-                textposition="outside",
-                cliponaxis=False
-            )
-            
-            dynamic_height = max(300, len(df_plot) * 35)
-            fig.update_layout(
-                height=dynamic_height,
-                bargap=0.35,
-                xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
-                yaxis=dict(title=""),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=20, b=0),
-                font=dict(color="#0F172A")
-            )
-
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("No votes logged yet.")
-
+                # CASE B: Valid Headers but Empty Rows -> Means User Deleted Data -> Clear Vault
+                st.session_state.vault_data = []
+        
     except:
-        # If network error, just wait for next 10s cycle
-        st.warning("Syncing with HQ...")
+        # CASE C: Network Error / Timeout -> Do NOTHING. Keep showing old data.
+        pass
+
+    # 3. DISPLAY FROM VAULT
+    total_votes_list = st.session_state.vault_data
+    
+    if total_votes_list:
+        df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
+        vote_counts = df_combined['Designation'].value_counts()
+        
+        col_sort, col_slider = st.columns([1, 1])
+        with col_sort:
+            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+        with col_slider:
+            top_n = st.slider("Display Top:", 5, 100, 30, 5)
+
+        vote_counts = vote_counts.head(top_n)
+        
+        df_plot = vote_counts.reset_index()
+        df_plot.columns = ['Designation', 'Votes']
+
+        if sort_order == "Most Votes":
+            df_plot = df_plot.sort_values(by='Votes', ascending=True)
+        else:
+            df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+        fig = px.bar(
+            df_plot,
+            x="Votes",
+            y="Designation",
+            orientation="h",
+            text="Votes"
+        )
+
+        fig.update_traces(
+            marker=dict(
+                color=df_plot["Votes"],
+                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                line=dict(width=0)
+            ),
+            textposition="outside",
+            cliponaxis=False
+        )
+        
+        dynamic_height = max(300, len(df_plot) * 35)
+        fig.update_layout(
+            height=dynamic_height,
+            bargap=0.35,
+            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+            yaxis=dict(title=""),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=20, b=0),
+            font=dict(color="#0F172A")
+        )
+
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("No votes logged yet.")
 
 live_dashboard()
