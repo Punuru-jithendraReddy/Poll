@@ -213,7 +213,7 @@ st.session_state.team_select = [t for t in st.session_state.team_select if t in 
 
 # Import Section
 with st.expander("Bulk Import"):
-    pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
+    pasted_data = st.text_area("Paste Data - Please do not use commas and make sure each name appears on a new line while bulk uploading.", height=100, disabled=not is_open)
     if st.button("Process Data", disabled=not is_open):
         if user_name == "Select identity...":
             st.warning("Please select your name first.")
