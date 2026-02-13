@@ -237,7 +237,7 @@ def timer_status_panel():
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.error("⛔ **TIME UP! Submissions Closed.**")
+        st.error("⛔ ** Submissions Closed.**")
 
 timer_status_panel()
 
@@ -265,7 +265,7 @@ forbidden = USER_SUGGESTIONS.get(current_user, [])
 available_teams = [t for t in TEAM_NAMES if t not in forbidden]
 
 with st.expander("Bulk Import"):
-    pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
+    pasted_data = st.text_area("Paste Data - Please do not use commas and make sure each name appears on a new line while bulk uploading.", height=100, disabled=not is_open)
     if st.button("Process Data", disabled=not is_open):
         if current_user == "Select identity...":
             st.warning("Please select your name first.")
