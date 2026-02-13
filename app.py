@@ -60,7 +60,9 @@ USER_EMAILS = {
     "B. Shrineeth Reddy": "Shrineeth.R@svarappstech.com",
     "Saikiran Kandhi": "Saikiran.K@svarappstech.com",
     "Vijay Sai": "Vijay.Velugubantla@svarappstech.com",
-    "Venkat": "Venkat.Goriparthi@svarappstech.com"
+    "Venkat": "Venkat.Goriparthi@svarappstech.com",
+    "Ramya Lingaraj" : "Ramya.Lingaraj@svarappstech.com",
+    "Devarajan SM" : "Devarajan.manickam@svarappstech.com"
 }
 
 TEAM_NAMES = [
