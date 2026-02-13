@@ -11,25 +11,26 @@ import time
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# 2. CONFIGURATION & STATE
+# 2. GLOBAL SHARED STATE (THE BRAIN)
 # ==========================================
+# @st.cache_resource makes this object SHARED across ALL users.
+# This fixes the sync issue. Everyone reads from this one variable.
 @st.cache_resource
-def get_global_config():
-    return {"end_time": None, "is_active": False}
+def get_shared_state():
+    return {
+        "end_time": None,
+        "is_active": False,
+        "vault_data": [] # Shared "High Water Mark" data
+    }
 
-global_config = get_global_config()
+shared_state = get_shared_state()
 
-# Initialize Session State
+# Local User Session State (Private to each user)
 if "submitted_emails" not in st.session_state: st.session_state.submitted_emails = set()
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "submission_error" not in st.session_state: st.session_state.submission_error = None
-if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
-
-# --- KEY ROTATION (Fixes "Transmission Error") ---
 if "form_id" not in st.session_state: st.session_state.form_id = 0
-
-# --- THE VAULT (High Water Mark Storage) ---
-if "vault_data" not in st.session_state: st.session_state.vault_data = []
+if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
 # URLS
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdd5OKJTG3E6k37eV9LbeXPxgSV7G8ONiMgnxoWunkn_hgY8Q/formResponse"
@@ -109,7 +110,7 @@ TEAM_NAMES = [
 ]
 
 USER_SUGGESTIONS = {
-    # (Same mapping as before)
+    # (Same mapping as before, truncated for brevity)
     "Ramya Lingaraj": [],
     "Devarajan SM": []
 }
@@ -132,7 +133,7 @@ def submit_vote():
     dynamic_key = f"team_select_{st.session_state.form_id}"
     teams = st.session_state.get(dynamic_key, [])
     
-    if not global_config["is_active"] or (global_config["end_time"] and time.time() > global_config["end_time"]):
+    if not shared_state["is_active"] or (shared_state["end_time"] and time.time() > shared_state["end_time"]):
         st.session_state.submission_error = "⚠️ Submission window closed."
         return
 
@@ -160,8 +161,9 @@ def submit_vote():
         }
         
         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
+        
         st.session_state.submitted_emails.add(email.strip().lower())
-        st.session_state.form_id += 1 # Reset form
+        st.session_state.form_id += 1 
         st.session_state.success_flag = True
         st.session_state.submission_error = None
         
@@ -179,28 +181,30 @@ with st.sidebar:
         st.success("Authorized")
         st.markdown("---")
         
-        # TIMER
+        # SHARED TIMER
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
         col_start, col_stop = st.columns(2)
         with col_start:
             if st.button("Start / Reset"):
-                global_config["end_time"] = time.time() + (new_duration * 60)
-                global_config["is_active"] = True
+                shared_state["end_time"] = time.time() + (new_duration * 60)
+                shared_state["is_active"] = True
                 st.rerun()
         with col_stop:
             if st.button("Stop"):
-                global_config["is_active"] = False
-                global_config["end_time"] = None
+                shared_state["is_active"] = False
+                shared_state["end_time"] = None
                 st.rerun()
 
         st.markdown("---")
         
         # FORCE REFRESH
         if st.button("🔄 Force Refresh Dashboard"):
+            # Clearing the shared vault triggers a fresh fetch for the next person who updates
+            # But better to just rerun to trigger the dashboard logic immediately
             st.rerun()
             
         # LOCAL DATA RESET
-        if st.button("🧹 Clear Local History"):
+        if st.button("🧹 Clear My Local Data"):
             st.session_state.submitted_emails = set()
             st.session_state.success_flag = False
             st.session_state.submission_error = None
@@ -209,15 +213,13 @@ with st.sidebar:
             time.sleep(1)
             st.rerun()
 
-        # BACKEND CLEARED SIGNAL
+        # GLOBAL BACKEND RESET
         st.markdown("---")
-        st.subheader("⚠️ Backend Actions")
-        st.caption("If you deleted data in Google Sheet, click this to reset dashboard.")
-        if st.button("🚨 Backend Cleared (Reset All)"):
-            st.session_state.vault_data = [] # WIPE MEMORY
-            st.session_state.submitted_emails = set()
-            st.session_state.form_id += 1
-            st.success("System Reset Complete.")
+        st.subheader("⚠️ Global Actions")
+        if st.button("🚨 Backend Cleared (Reset Everyone)"):
+            # This clears the SHARED VAULT for ALL users
+            shared_state["vault_data"] = [] 
+            st.toast("System Reset: Dashboard cleared for everyone.", icon="🗑️")
             time.sleep(1)
             st.rerun()
 
@@ -229,8 +231,8 @@ st.caption("Choose your team name wisely")
 
 @st.fragment(run_every=1)
 def timer_status_panel():
-    current_is_active = global_config["is_active"]
-    current_end_time = global_config["end_time"]
+    current_is_active = shared_state["is_active"]
+    current_end_time = shared_state["end_time"]
     time_left = (current_end_time - time.time()) if current_end_time else 0
     real_time_is_open = current_is_active and (time_left > 0)
     
@@ -282,6 +284,7 @@ with col_email:
         key="user_email"
     )
 
+# Filter suggestions
 current_user = st.session_state.user_name
 forbidden = USER_SUGGESTIONS.get(current_user, [])
 available_teams = [t for t in TEAM_NAMES if t not in forbidden]
@@ -326,37 +329,55 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (HIGH WATER MARK LOGIC)
+# 8. LIVE DASHBOARD (SHARED & SYNCHRONIZED)
 # ==========================================
 @st.fragment(run_every=10)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. FETCH
+        # 1. READ GOOGLE SHEET
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. VALIDATE & PARSE
         server_votes_list = []
-        if not df.empty and len(df.columns) >= 4:
+        is_empty = False
+
+        if df.empty or len(df.columns) < 4:
+            is_empty = True
+        else:
             magic_column = df.columns[3]
-            if not df[magic_column].isnull().all():
+            if df[magic_column].isnull().all():
+                is_empty = True
+            else:
                 all_votes_series = df[magic_column].dropna().astype(str)
                 server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
+                
+                # Check actual list content
+                if not server_votes_list:
+                    is_empty = True
 
-        # 3. HIGH WATER MARK LOGIC (The Anti-Flicker & Stability Fix)
-        # Rule: Only update if the new count is >= old count. 
-        # This prevents the graph from disappearing if Google sends a partial/empty cached file.
-        if len(server_votes_list) >= len(st.session_state.vault_data):
-            st.session_state.vault_data = server_votes_list
-        # If server_votes_list is smaller (e.g. 0), we ignore it and show old data.
-        # This is why the "Backend Cleared" button is mandatory for resetting.
+        # 2. SHARED HIGH WATER MARK LOGIC
+        # We only update the shared state if:
+        # A) We have MORE/EQUAL data than what's currently there (Growth)
+        # B) The current shared state is empty (Initialization)
+        # We DO NOT update if server_votes_list is empty but shared state has data (protects against flicker)
+        
+        current_vault_len = len(shared_state["vault_data"])
+        new_data_len = len(server_votes_list)
+
+        if not is_empty:
+            if new_data_len >= current_vault_len:
+                # We found valid data that is >= what we knew. Update everyone.
+                shared_state["vault_data"] = server_votes_list
+        
+        # Note: If is_empty is True, we do nothing. We keep the old data visible.
+        # Unless the Admin clicked "Reset", which clears shared_state["vault_data"] manually.
 
     except Exception:
-        pass # Ignore network errors, keep showing old data
+        pass 
 
-    # 4. DISPLAY
-    total_votes_list = st.session_state.vault_data
+    # 3. DISPLAY FROM SHARED VAULT
+    total_votes_list = shared_state["vault_data"]
     
     if total_votes_list:
         df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
