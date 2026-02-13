@@ -37,7 +37,7 @@ GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV412
 # 3. MASTER DATA
 # ==========================================
 USER_NAMES = [
-    "Select identity...", # Default option
+    "Select identity...", 
     "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
     "Bhavana Lanka", "Sravanthi Chapram", "B. Shrineeth Reddy",
     "Shreya Singh", "Tharuni Vallepi", "Saumya Lailamony",
@@ -104,13 +104,13 @@ TEAM_NAMES = [
 ]
 
 USER_SUGGESTIONS = {
-    # (Suggestions truncated for brevity, same as before)
+    # (Same list as before, truncated for brevity)
     "Ramya Lingaraj": [],
     "Devarajan SM": []
 }
 
 # ==========================================
-# 4. CALLBACK FUNCTIONS (FIX FOR STATE ERROR)
+# 4. CALLBACK FUNCTIONS
 # ==========================================
 def update_email():
     """Auto-fills email when name changes"""
@@ -121,7 +121,7 @@ def update_email():
         st.session_state.user_email = ""
 
 def submit_vote():
-    """Handles submission BEFORE the UI reloads"""
+    """Handles submission"""
     # 1. Get Values
     name = st.session_state.user_name
     email = st.session_state.user_email
@@ -161,9 +161,9 @@ def submit_vote():
         # Send to Google
         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
         
-        # 6. Success Actions (Safe to clear state here!)
+        # 6. Success Actions
         st.session_state.submitted_emails.add(email.strip().lower())
-        st.session_state.team_select = [] # This clears the dropdown safely
+        st.session_state.team_select = [] 
         st.session_state.success_flag = True
         st.session_state.submission_error = None
         
@@ -248,18 +248,16 @@ timer_status_panel()
 # ==========================================
 is_open = st.session_state.last_known_is_open
 
-# Display Success/Error Messages from State
 if st.session_state.success_flag:
     st.toast("✅ Submitted successfully!", icon="🎉")
     st.session_state.success_flag = False
 
 if st.session_state.submission_error:
     st.error(st.session_state.submission_error)
-    st.session_state.submission_error = None # Clear after showing
+    st.session_state.submission_error = None
 
 col_name, col_email = st.columns(2)
 with col_name:
-    # Key is required for callback access
     st.selectbox(
         "Operative Name", 
         options=USER_NAMES, 
@@ -268,7 +266,6 @@ with col_name:
         on_change=update_email
     )
 with col_email:
-    # Key is required for callback access
     st.text_input(
         "Corporate Email", 
         placeholder="agent@svarappstech.com", 
@@ -276,12 +273,12 @@ with col_email:
         key="user_email"
     )
 
-# Logic for Team Suggestions (Visual only, doesn't affect list logic)
+# Filter suggestions
 current_user = st.session_state.user_name
 forbidden = USER_SUGGESTIONS.get(current_user, [])
 available_teams = [t for t in TEAM_NAMES if t not in forbidden]
 
-# Import Section
+# Import
 with st.expander("Bulk Import"):
     pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
     if st.button("Process Data", disabled=not is_open):
@@ -294,7 +291,6 @@ with st.expander("Bulk Import"):
                 cl = line.strip().lower()
                 if cl in clean_allowed: matched_lines.append(clean_allowed[cl])
             
-            # Update state for multiselect
             st.session_state.team_select = list(set(st.session_state.team_select + matched_lines))
             st.rerun()
 
@@ -303,7 +299,7 @@ st.markdown("### Target Selection")
 st.multiselect(
     "Combobox Search",
     options=available_teams,
-    key="team_select", # Key connects it to session_state
+    key="team_select",
     label_visibility="collapsed",
     placeholder="Search manually or review imported targets...",
     disabled=not is_open
@@ -311,7 +307,6 @@ st.multiselect(
 
 st.write("")
 if is_open:
-    # Button triggers the callback defined above
     st.button("Submit Selections", type="primary", use_container_width=True, on_click=submit_vote)
 else:
     st.button("⛔ Submission Closed", disabled=True, use_container_width=True)
@@ -319,25 +314,23 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (10s REFRESH - PURE SERVER)
+# 8. LIVE DASHBOARD (PURE SERVER - 10s REFRESH)
 # ==========================================
 @st.fragment(run_every=10)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. READ GOOGLE SHEET
+        # 1. READ GOOGLE SHEET DIRECTLY (NO LOCAL MIXING)
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
-        # 2. PARSE DATA
+        server_votes_list = []
         if not df.empty and len(df.columns) >= 4:
             magic_column = df.columns[3]
             all_votes_series = df[magic_column].dropna().astype(str)
             server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-        else:
-            server_votes_list = []
 
-        # 3. DISPLAY
+        # 2. DISPLAY IF DATA EXISTS
         if server_votes_list:
             df_combined = pd.DataFrame(server_votes_list, columns=['Designation'])
             vote_counts = df_combined['Designation'].value_counts()
