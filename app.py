@@ -237,7 +237,7 @@ def timer_status_panel():
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.error("⛔ ** Submissions Closed.**")
+        st.error("⛔  Submissions Closed  .")
 
 timer_status_panel()
 
