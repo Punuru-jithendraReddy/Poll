@@ -25,10 +25,6 @@ if "submitted_emails" not in st.session_state: st.session_state.submitted_emails
 if "success_flag" not in st.session_state: st.session_state.success_flag = False
 if "last_known_is_open" not in st.session_state: st.session_state.last_known_is_open = False
 
-# --- THE ANTI-FLICKER VAULT ---
-# This variable holds the graph data. We NEVER clear this automatically.
-if "vault_data" not in st.session_state: st.session_state.vault_data = []
-
 # ==========================================
 # 3. CONFIGURATION (URLS)
 # ==========================================
@@ -39,13 +35,14 @@ ENTRY_MAGIC = "entry.921793836"
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1iV4125NZgmskENeTvn71zt7gF7X8gy260UXQruoh5Os4WfxLgWWoGiMWv18jYlWcck6dlzHUq9X5/pub?gid=1388192502&single=true&output=csv"
 
 # ==========================================
-# 4. MASTER DATA
+# 4. MASTER DATA (UPDATED)
 # ==========================================
 USER_NAMES = [
     "Saikiran Kandhi", "Shaik Afroz", "Venkat", "Jithendra reddy",
     "Bhavana Lanka", "Sravanthi Chapram", "B. Shrineeth Reddy",
     "Shreya Singh", "Tharuni Vallepi", "Saumya Lailamony",
-    "Monisha", "Vijay Sai"
+    "Monisha", "Vijay Sai",
+    "Ramya Lingaraj", "Devarajan SM"
 ]
 
 USER_EMAILS = {
@@ -61,8 +58,8 @@ USER_EMAILS = {
     "Saikiran Kandhi": "Saikiran.K@svarappstech.com",
     "Vijay Sai": "Vijay.Velugubantla@svarappstech.com",
     "Venkat": "Venkat.Goriparthi@svarappstech.com",
-    "Ramya Lingaraj" : "Ramya.Lingaraj@svarappstech.com",
-    "Devarajan SM" : "Devarajan.manickam@svarappstech.com"
+    "Ramya Lingaraj": "Ramya.Lingaraj@svarappstech.com",
+    "Devarajan SM": "Devarajan.manickam@svarappstech.com"
 }
 
 TEAM_NAMES = [
@@ -119,8 +116,8 @@ USER_SUGGESTIONS = {
     "Saumya Lailamony": ["NextWave","InnovX","FutureForge","Technova","Dynamiq","Infinitum","Incubis","Ignitia","Pulseon","Techspire","PioneerX","Creatiq","Imaginex","Concepta","Datavex","Logicore","Infinitiq","Visionix","Coreon","Techvanta"],
     "Monisha": ["InnoVortex","NovaForge","Thinkubator","IgniteX","IdeaFoundry","VisionCraft","QuantumHive","NeoGenesis","InnoCore","MindForge","FutureNest","NovaThink","AetherWorks","Nexora","Evolvex","OriginPoint","Infinitum Forge","HelixWorks","FutureWeave","Cognitiva","Zentrix","Neovex","Quantro","Virex","Axion","Orbix","Fluxa","Kinetiq","Xelion","Ultrix"],
     "Vijay Sai": ["NULL_STATE","8HZ","D E A D _ B I T","ISO_CHROME","PRISM_RIOT","Ambiance 1.0","Object / 001","Protocol 28","Signal & Salt","Cold Start","NOISE FLOOR","RAW INPUT","OFF GRID","T-MINUS","PAPER THIN","28°_STUDIO.","Hello Team.","The Glitch.","ROOM_204.","H Y P E R _ S O L E.","C Y P H E R _ S I N."],
-    "Ramya Lingaraj" : [],
-    "Devarajan SM" : []
+    "Ramya Lingaraj": [], # No suggestions yet, can vote for anyone
+    "Devarajan SM": []    # No suggestions yet, can vote for anyone
 }
 
 # ==========================================
@@ -149,14 +146,11 @@ with st.sidebar:
                 global_config["end_time"] = None
                 st.rerun()
 
-        # FLUSH CACHE (ONLY way to clear data now)
+        # FLUSH CACHE
         st.markdown("---")
-        st.warning("⚠️ Manual Reset")
-        st.caption("The dashboard is locked to prevent flickering. To clear data, click below.")
-        if st.button("🧹 Force Clear Dashboard"):
+        if st.button("🧹 Force Reset Data"):
             st.session_state.submitted_emails = set()
-            st.session_state.vault_data = [] # CLEAR THE VAULT
-            st.success("Data cleared.")
+            st.success("Data reset.")
             time.sleep(1)
             st.rerun()
 
@@ -217,7 +211,7 @@ st.session_state.team_select = [t for t in st.session_state.team_select if t in 
 
 # Import Section
 with st.expander("Bulk Import"):
-    pasted_data = st.text_area("Paste Data - Please do not use commas and make sure each name appears on a new line while bulk uploading.", height=100, disabled=not is_open)
+    pasted_data = st.text_area("Paste Data", height=100, disabled=not is_open)
     if st.button("Process Data", disabled=not is_open):
         if user_name == "Select identity...":
             st.warning("Please select your name first.")
@@ -294,7 +288,6 @@ if is_open:
             if is_duplicate:
                 st.error("This email has already submitted.")
             else:
-                # Use Standard Payload
                 payload = {
                     ENTRY_EMAIL: user_email,
                     ENTRY_NAME: user_name,
@@ -302,23 +295,24 @@ if is_open:
                 }
                 
                 try:
-                    # 1. Capture count BEFORE submit
+                    # 1. Capture current count BEFORE submitting
                     pre_submit_count = get_total_vote_count()
                     
                     # 2. SEND DATA
                     requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
                     st.session_state.submitted_emails.add(target_email)
                     
-                    # 3. STRICT WAIT LOOP (Loading spinner until data arrives)
-                    with st.spinner("📡 Transmitting & Verifying... Please wait..."):
-                        start_wait = time.time()
-                        # Wait max 10 seconds
-                        while time.time() - start_wait < 10:
-                            time.sleep(2)
+                    # 3. STRICT SYNC LOOP (Wait for data to arrive)
+                    with st.spinner("📡 Encrypting & Transmitting to HQ... (Waiting for confirmation)"):
+                        # Loop for up to 10 seconds to wait for Google Sheets to update
+                        for _ in range(5):
+                            time.sleep(2) # Wait 2s
                             current_count = get_total_vote_count()
+                            # If we see more votes than before, the data has arrived!
                             if current_count > pre_submit_count:
                                 break
                     
+                    # 4. DONE - Refresh the page to show new data
                     st.session_state.team_select = []
                     st.session_state.success_flag = True
                     st.rerun()
@@ -330,85 +324,81 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (ANTI-FLICKER VAULT)
+# 8. LIVE DASHBOARD (PURE SERVER DATA)
 # ==========================================
-@st.fragment(run_every=3)
+# Run every 5 seconds to reduce flickering on normal views
+@st.fragment(run_every=5)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. FETCH
+        # 1. LOAD SERVER DATA ONLY (No Local Mixing)
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
         if not df.empty and len(df.columns) >= 4:
             magic_column = df.columns[3]
             all_votes_series = df[magic_column].dropna().astype(str)
             server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
+        else:
+            server_votes_list = []
+
+        total_votes_list = server_votes_list 
+        
+        if total_votes_list:
+            df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
+            vote_counts = df_combined['Designation'].value_counts()
             
-            # 2. VAULT LOGIC (Anti-Flicker)
-            # Only update if we have data. If server returns 0/error, keep old data.
-            # To reset, use Admin button.
-            if len(server_votes_list) >= len(st.session_state.vault_data):
-                 st.session_state.vault_data = server_votes_list
+            col_sort, col_slider = st.columns([1, 1])
+            with col_sort:
+                sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
+            with col_slider:
+                top_n = st.slider("Display Top:", 5, 100, 30, 5)
+
+            vote_counts = vote_counts.head(top_n)
+            
+            df_plot = vote_counts.reset_index()
+            df_plot.columns = ['Designation', 'Votes']
+
+            if sort_order == "Most Votes":
+                df_plot = df_plot.sort_values(by='Votes', ascending=True) # Ascending for BarH
+            else:
+                df_plot = df_plot.sort_values(by='Designation', ascending=False)
+
+            fig = px.bar(
+                df_plot,
+                x="Votes",
+                y="Designation",
+                orientation="h",
+                text="Votes"
+            )
+
+            fig.update_traces(
+                marker=dict(
+                    color=df_plot["Votes"],
+                    colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
+                    line=dict(width=0)
+                ),
+                textposition="outside",
+                cliponaxis=False
+            )
+            
+            dynamic_height = max(300, len(df_plot) * 35)
+            fig.update_layout(
+                height=dynamic_height,
+                bargap=0.35,
+                xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+                yaxis=dict(title=""),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=20, b=0),
+                font=dict(color="#0F172A")
+            )
+
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No votes logged yet.")
 
     except:
         pass
-
-    # 3. RENDER FROM VAULT
-    total_votes_list = st.session_state.vault_data
-    
-    if total_votes_list:
-        df_combined = pd.DataFrame(total_votes_list, columns=['Designation'])
-        vote_counts = df_combined['Designation'].value_counts()
-        
-        col_sort, col_slider = st.columns([1, 1])
-        with col_sort:
-            sort_order = st.selectbox("Sort By:", ["Most Votes", "Alphabetical"])
-        with col_slider:
-            top_n = st.slider("Display Top:", 5, 100, 30, 5)
-
-        vote_counts = vote_counts.head(top_n)
-        
-        df_plot = vote_counts.reset_index()
-        df_plot.columns = ['Designation', 'Votes']
-
-        if sort_order == "Most Votes":
-            df_plot = df_plot.sort_values(by='Votes', ascending=True)
-        else:
-            df_plot = df_plot.sort_values(by='Designation', ascending=False)
-
-        fig = px.bar(
-            df_plot,
-            x="Votes",
-            y="Designation",
-            orientation="h",
-            text="Votes"
-        )
-
-        fig.update_traces(
-            marker=dict(
-                color=df_plot["Votes"],
-                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                line=dict(width=0)
-            ),
-            textposition="outside",
-            cliponaxis=False
-        )
-        
-        dynamic_height = max(300, len(df_plot) * 35)
-        fig.update_layout(
-            height=dynamic_height,
-            bargap=0.35,
-            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
-            yaxis=dict(title=""),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=0, r=0, t=20, b=0),
-            font=dict(color="#0F172A")
-        )
-
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    else:
-        st.info("No votes logged yet.")
 
 live_dashboard()
