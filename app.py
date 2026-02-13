@@ -11,14 +11,14 @@ import time
 st.set_page_config(page_title="Identity Intel", page_icon="⚡", layout="centered")
 
 # ==========================================
-# 2. GLOBAL SHARED STATE (THE BRAIN)
+# 2. GLOBAL SHARED STATE
 # ==========================================
 @st.cache_resource
 def get_shared_state():
     return {
         "end_time": None,
         "is_active": False,
-        "vault_data": [] # Shared Data
+        "vault_data": [] 
     }
 
 shared_state = get_shared_state()
@@ -117,7 +117,6 @@ USER_SUGGESTIONS = {
 # 4. CALLBACK FUNCTIONS
 # ==========================================
 def update_email():
-    """Auto-fills email when name changes"""
     name = st.session_state.user_name
     if name in USER_EMAILS:
         st.session_state.user_email = USER_EMAILS[name]
@@ -125,7 +124,6 @@ def update_email():
         st.session_state.user_email = ""
 
 def submit_vote():
-    """Handles submission"""
     name = st.session_state.user_name
     email = st.session_state.user_email
     dynamic_key = f"team_select_{st.session_state.form_id}"
@@ -159,7 +157,6 @@ def submit_vote():
         }
         
         requests.post(GOOGLE_FORM_URL, data=payload, timeout=5)
-        
         st.session_state.submitted_emails.add(email.strip().lower())
         st.session_state.form_id += 1 
         st.session_state.success_flag = True
@@ -179,7 +176,6 @@ with st.sidebar:
         st.success("Authorized")
         st.markdown("---")
         
-        # SHARED TIMER
         new_duration = st.number_input("Minutes", min_value=1, value=10, step=1)
         col_start, col_stop = st.columns(2)
         with col_start:
@@ -194,12 +190,9 @@ with st.sidebar:
                 st.rerun()
 
         st.markdown("---")
-        
-        # FORCE REFRESH
         if st.button("🔄 Force Refresh Dashboard"):
             st.rerun()
             
-        # LOCAL DATA RESET
         if st.button("🧹 Clear My Local Data"):
             st.session_state.submitted_emails = set()
             st.session_state.success_flag = False
@@ -209,17 +202,16 @@ with st.sidebar:
             time.sleep(1)
             st.rerun()
 
-        # GLOBAL BACKEND RESET
         st.markdown("---")
         st.subheader("⚠️ Global Actions")
         if st.button("🚨 Backend Cleared (Reset All)"):
-            shared_state["vault_data"] = [] # Instantly Clear Everyone
+            shared_state["vault_data"] = [] 
             st.toast("System Reset: Dashboard cleared for everyone.", icon="🗑️")
             time.sleep(1)
             st.rerun()
 
 # ==========================================
-# 6. WATCHDOG / TIMER
+# 6. APP UI
 # ==========================================
 st.title("Identity Intel")
 st.caption("Choose your team name wisely")
@@ -250,7 +242,7 @@ def timer_status_panel():
 timer_status_panel()
 
 # ==========================================
-# 7. MAIN APP LOGIC
+# 7. MAIN LOGIC
 # ==========================================
 is_open = st.session_state.last_known_is_open
 
@@ -264,20 +256,9 @@ if st.session_state.submission_error:
 
 col_name, col_email = st.columns(2)
 with col_name:
-    st.selectbox(
-        "Operative Name", 
-        options=USER_NAMES, 
-        disabled=not is_open, 
-        key="user_name", 
-        on_change=update_email
-    )
+    st.selectbox("Operative Name", options=USER_NAMES, disabled=not is_open, key="user_name", on_change=update_email)
 with col_email:
-    st.text_input(
-        "Corporate Email", 
-        placeholder="agent@svarappstech.com", 
-        disabled=True, 
-        key="user_email"
-    )
+    st.text_input("Corporate Email", placeholder="agent@svarappstech.com", disabled=True, key="user_email")
 
 current_user = st.session_state.user_name
 forbidden = USER_SUGGESTIONS.get(current_user, [])
@@ -305,14 +286,7 @@ with st.expander("Bulk Import"):
 st.markdown("### Target Selection")
 dynamic_key = f"team_select_{st.session_state.form_id}"
 
-st.multiselect(
-    "Combobox Search",
-    options=available_teams,
-    key=dynamic_key,
-    label_visibility="collapsed",
-    placeholder="Search manually or review imported targets...",
-    disabled=not is_open
-)
+st.multiselect("Combobox Search", options=available_teams, key=dynamic_key, label_visibility="collapsed", placeholder="Search manually or review imported targets...", disabled=not is_open)
 
 st.write("")
 if is_open:
@@ -323,50 +297,68 @@ else:
 st.divider()
 
 # ==========================================
-# 8. LIVE DASHBOARD (SHARED SMART SYNC)
+# 8. LIVE DASHBOARD (SMART COLUMN DETECTION)
 # ==========================================
 @st.fragment(run_every=10)
 def live_dashboard():
     st.markdown("### Live Leaderboard")
 
     try:
-        # 1. READ GOOGLE SHEET
         df = pd.read_csv(f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}", on_bad_lines='skip')
         
         server_votes_list = []
-        is_server_empty = False
+        debug_status = "Connecting..."
+        is_empty = False
 
-        # 2. ANALYZE DATA
-        if df.empty or len(df.columns) < 4:
-            is_server_empty = True
+        if df.empty:
+            is_empty = True
+            debug_status = "Sheet is empty."
         else:
-            magic_column = df.columns[3]
-            if df[magic_column].isnull().all():
-                is_server_empty = True
-            else:
-                all_votes_series = df[magic_column].dropna().astype(str)
+            # --- SMART COLUMN FINDER ---
+            # Instead of assuming column index 3, we look for the column containing known teams
+            found_col = None
+            
+            # Iterate through all columns to find team data
+            for col in df.columns:
+                # Check sample values (top 20 rows)
+                sample_values = df[col].dropna().astype(str).tolist()[:20]
+                # If any value contains a known team name (or part of it), we found our column
+                for val in sample_values:
+                    # Split comma separated just in case
+                    parts = [p.strip() for p in val.split(',')]
+                    if any(t in parts for t in TEAM_NAMES):
+                        found_col = col
+                        break
+                if found_col:
+                    break
+            
+            if found_col:
+                all_votes_series = df[found_col].dropna().astype(str)
                 server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
-                
-                if not server_votes_list:
-                    is_server_empty = True
+                debug_status = f"Syncing {len(server_votes_list)} votes."
+            else:
+                # Fallback: If sheet has rows but we can't find team names, maybe they are new names?
+                # Use the last column as a Hail Mary.
+                if len(df.columns) > 1:
+                    last_col = df.columns[-1]
+                    all_votes_series = df[last_col].dropna().astype(str)
+                    server_votes_list = all_votes_series.str.split(',').explode().str.strip().tolist()
+                    debug_status = "Using last column (Fallback)."
+                else:
+                    is_empty = True
+                    debug_status = "No valid data columns found."
 
-        # 3. SMART SYNC (Allows Deletion, Stops Flickering)
-        # Logic: 
-        # - If server has data -> Update Shared State immediately.
-        # - If server is empty -> Update Shared State to Empty (Deletion allowed).
-        # - If Exception -> Do NOTHING (Prevents flickering on network error).
-        
-        # We only reach here if NO exception occurred.
-        if is_server_empty:
+        # 2. SHARED STATE UPDATE
+        if is_empty:
             shared_state["vault_data"] = []
-        else:
+        elif server_votes_list:
             shared_state["vault_data"] = server_votes_list
 
-    except Exception:
-        # Network failed? Keep showing the old Shared State.
+    except Exception as e:
+        debug_status = f"Network Issues (Retrying...)"
         pass 
 
-    # 4. DISPLAY
+    # 3. RENDER
     total_votes_list = shared_state["vault_data"]
     
     if total_votes_list:
@@ -389,38 +381,18 @@ def live_dashboard():
         else:
             df_plot = df_plot.sort_values(by='Designation', ascending=False)
 
-        fig = px.bar(
-            df_plot,
-            x="Votes",
-            y="Designation",
-            orientation="h",
-            text="Votes"
-        )
-
-        fig.update_traces(
-            marker=dict(
-                color=df_plot["Votes"],
-                colorscale=[[0, "#6366F1"], [1, "#7C3AED"]],
-                line=dict(width=0)
-            ),
-            textposition="outside",
-            cliponaxis=False
-        )
-        
-        dynamic_height = max(300, len(df_plot) * 35)
+        fig = px.bar(df_plot, x="Votes", y="Designation", orientation="h", text="Votes")
+        fig.update_traces(marker_color='#FF4B4B', textposition='outside')
         fig.update_layout(
-            height=dynamic_height,
-            bargap=0.35,
-            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Total Votes"),
+            height=max(300, len(df_plot) * 35),
             yaxis=dict(title=""),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=0, r=0, t=20, b=0),
-            font=dict(color="#0F172A")
+            plot_bgcolor="rgba(0,0,0,0)"
         )
-
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     else:
         st.info("No votes logged yet.")
+    
+    # Tiny Debug Status (Remove this line later if you want)
+    st.caption(f"Status: {debug_status}")
 
 live_dashboard()
